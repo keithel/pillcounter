@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import io.qt.dev
 
 ApplicationWindow {
     id: window
@@ -12,9 +13,16 @@ ApplicationWindow {
 
     title: qsTr("Pill Counter")
 
-    property int pillCount: -1
     property real buttonFontPixelSize: (window.width <= 640) ? 18 : 27
     property real textFontPixelSize: (window.width <= 640) ? 18 : 27
+    property string imagePath: "pills1.jpg"
+    property alias pillCount: pillCounter.pill_count
+    property alias imageFormat: pillCounter.image_format
+
+    PillCounter {
+        id: pillCounter
+        image_path: imagePath
+    }
 
     Item {
         id: windowContent
@@ -34,7 +42,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 10
 
-                source: "image://cv/pills1.jpg"
+                source: "image://cv/" + imagePath
             }
         }
 
@@ -44,6 +52,12 @@ ApplicationWindow {
                 bottom: parent.bottom
                 left: parent.left
                 right: parent.right
+            }
+
+            Text {
+                Layout.bottomMargin: 20
+                font.pixelSize: textFontPixelSize
+                text: "Image format: " + imageFormat
             }
 
             Text {

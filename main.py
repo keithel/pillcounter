@@ -6,7 +6,7 @@ import sys
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from ImageProviders import ColorImageProvider, CVImageProvider
-
+import PillCounter
 
 if __name__ == "__main__":
     app = QGuiApplication(sys.argv)
