@@ -3,17 +3,24 @@ from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QPixmap, QColor, QImage
 
-import cv2
 from PySide6.QtCore import Qt
 
 
 def QImage_from_cv_image(cv_img):
     """Convert from an opencv image to QImage"""
     # https://gist.github.com/docPhil99/ca4da12c9d6f29b9cea137b617c7b8b1
-    cv_height, cv_width, cv_channels = cv_img.shape
+    print(f"cv_img.shape == {cv_img.shape}")
+    cv_height, cv_width, cv_channels = (0, 0, 1)
+    format = None
+    if len(cv_img.shape) > 2:
+        cv_height, cv_width, cv_channels = cv_img.shape
+        format = QImage.Format_BGR888
+    else:
+        cv_height, cv_width = cv_img.shape
+        format = QImage.Format_Grayscale8
     bytes_per_line = cv_width * cv_channels
     return QImage(cv_img.data, cv_width, cv_height, bytes_per_line,
-                  QImage.Format_BGR888)
+                  format)
 
 
 class ColorImageProvider(QQuickImageProvider):
@@ -37,12 +44,28 @@ class ColorImageProvider(QQuickImageProvider):
 
 
 class CVImageProvider(QQuickImageProvider):
+    _instance = None
+
     def __init__(self):
+        """Do not call this from user code - use instance()"""
         super().__init__(QQuickImageProvider.Image)
+        self._cv_images = {}
+
+    def instance():
+        if CVImageProvider._instance is None:
+            CVImageProvider._instance = CVImageProvider()
+        return CVImageProvider._instance
+
+    def set_cv_image(self, id, cv_image):
+        self._cv_images[id] = cv_image
 
     def requestImage(self, id, size, requestedSize):
         print(f"requestImage(self, {id}, {str(size)}, {str(requestedSize)}")
-        cv_image = cv2.imread(id)
+        try:
+            cv_image = self._cv_images[id]
+        except KeyError:
+            return QImage()
+
         qimage = QImage_from_cv_image(cv_image)
 
         if size is not None:

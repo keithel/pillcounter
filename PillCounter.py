@@ -4,6 +4,9 @@ from PySide6.QtQml import QmlElement
 
 import os
 import imghdr
+import cv2
+import numpy as np
+from ImageProviders import CVImageProvider
 
 QML_IMPORT_NAME = "io.qt.dev"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -42,6 +45,20 @@ class PillCounter(QObject):
         # Validate if the file is in a supported image format.
         self.set_image_format(imghdr.what(image_path))
         # Kick off work to count pills
+        # Going to see if this technique will work for pills:
+        # https://stackoverflow.com/questions/58751101/count-number-of-cells-in-the-image
+        # https://stackoverflow.com/questions/17239253/opencv-bgr2hsv-creates-lots-of-artifacts
+        image = cv2.imread(self._image_path)
+#        original = image.copy()
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        hsv_lower = np.array([0, 0, 160])  # [156, 60, 0])
+        hsv_upper = np.array([180, 50, 255])  # [179, 115, 255])
+
+        # https://docs.opencv.org/3.4/da/d97/tutorial_threshold_inRange.html
+        mask = cv2.inRange(hsv, hsv_lower, hsv_upper)
+        image_provider = CVImageProvider.instance()
+        image_provider.set_cv_image(self._image_path, mask)
 
     def get_pill_count(self):
         return self._pill_count
