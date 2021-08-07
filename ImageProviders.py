@@ -7,6 +7,15 @@ import cv2
 from PySide6.QtCore import Qt
 
 
+def QImage_from_cv_image(cv_img):
+    """Convert from an opencv image to QImage"""
+    # https://gist.github.com/docPhil99/ca4da12c9d6f29b9cea137b617c7b8b1
+    cv_height, cv_width, cv_channels = cv_img.shape
+    bytes_per_line = cv_width * cv_channels
+    return QImage(cv_img.data, cv_width, cv_height, bytes_per_line,
+                  QImage.Format_BGR888)
+
+
 class ColorImageProvider(QQuickImageProvider):
     def __init__(self):
         super().__init__(QQuickImageProvider.Pixmap)
@@ -33,8 +42,8 @@ class CVImageProvider(QQuickImageProvider):
 
     def requestImage(self, id, size, requestedSize):
         print(f"requestImage(self, {id}, {str(size)}, {str(requestedSize)}")
-        cv_img = cv2.imread(id)
-        qimage = CVImageProvider.convert_cv_qt(cv_img)
+        cv_image = cv2.imread(id)
+        qimage = QImage_from_cv_image(cv_image)
 
         if size is not None:
             size.setWidth(qimage.width())
@@ -47,16 +56,8 @@ class CVImageProvider(QQuickImageProvider):
             height = size.height()
             if requestedSize.height() > 0:
                 height = requestedSize.height()
-            qimage = qimage.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            qimage = qimage.scaled(width, height,
+                                   Qt.KeepAspectRatio,
+                                   Qt.SmoothTransformation)
 
-        return qimage
-
-    def convert_cv_qt(cv_img):
-        """Convert from an opencv image to QImage"""
-        # https://gist.github.com/docPhil99/ca4da12c9d6f29b9cea137b617c7b8b1
-        rgb_image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB) # This probably can be achieved once as a QImage with rgbSwap() method. Also probably more memory efficient.
-        h, w, ch = rgb_image.shape
-        bytes_per_line = ch * w
-        qimage = QImage(rgb_image.data, w, h, bytes_per_line,
-                        QImage.Format_RGB888)
         return qimage
