@@ -8,20 +8,30 @@ ApplicationWindow {
     visible: true
     width: 640
     height: 480
-//    flags: Qt.FramelessWindowHint
-//    visibility: "Maximized"
+
+    Component.onCompleted: {
+        pillCounter.activate()
+        imagePath = "pills1.jpg"
+        image.source = Qt.binding(function() { return "image://cv/" + imagePath + "?count=" + pillCounter.image_count; } )
+    }
 
     title: qsTr("Pill Counter")
 
     property real buttonFontPixelSize: (window.width <= 640) ? 18 : 27
     property real textFontPixelSize: (window.width <= 640) ? 18 : 27
-    property string imagePath: "pills1.jpg"
+    property string imagePath: ""
     property alias pillCount: pillCounter.pill_count
     property alias imageFormat: pillCounter.image_format
 
     PillCounter {
         id: pillCounter
         image_path: imagePath
+        hue_low: hueLowSlider.value
+        hue_high: hueHighSlider.value
+        saturation_low: saturationLowSlider.value
+        saturation_high: saturationHighSlider.value
+        value_low: valueLowSlider.value
+        value_high: valueHighSlider.value
     }
 
     Item {
@@ -39,10 +49,9 @@ ApplicationWindow {
             color: "transparent"
 
             Image {
+                id: image
                 anchors.fill: parent
                 anchors.margins: 10
-
-                source: "image://cv/" + imagePath + "?count=" + pillCounter.image_count
             }
         }
 
@@ -71,6 +80,64 @@ ApplicationWindow {
 
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
+                Label {
+                    text: "H"
+                }
+                ColumnLayout {
+                    Slider {
+                        id: hueLowSlider
+                        from: 0
+                        to: 180
+                        stepSize: 1
+                        value: 0
+                    }
+                    Slider {
+                        id: hueHighSlider
+                        from: 0
+                        to: 180
+                        stepSize: 1
+                        value: 180
+                    }
+                }
+                Label {
+                    text: "S"
+                }
+                ColumnLayout {
+                    Slider {
+                        id: saturationLowSlider
+                        from: 0
+                        to: 255
+                        stepSize: 1
+                        value: 1  // 0
+                    }
+                    Slider {
+                        id: saturationHighSlider
+                        from: 0
+                        to: 255
+                        stepSize: 1
+                        value: 39  // 50
+                    }
+                }
+                Label {
+                    text: "V"
+                }
+                ColumnLayout {
+                    Slider {
+                        id: valueLowSlider
+                        from: 0
+                        to: 255
+                        stepSize: 1
+                        value: 200  // 160
+                    }
+                    Slider {
+                        id: valueHighSlider
+                        from: 0
+                        to: 255
+                        stepSize: 1
+                        value: 255
+                    }
+                }
+
                 Button {
 //                    background: Item {}
                     text: "Quit"
