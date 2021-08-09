@@ -6,6 +6,7 @@ import os
 import imghdr
 import cv2
 import numpy as np
+import math
 from ImageProviders import CVImageProvider
 
 QML_IMPORT_NAME = "io.qt.dev"
@@ -69,9 +70,32 @@ class PillCounter(QObject):
 
             # https://docs.opencv.org/3.4/da/d97/tutorial_threshold_inRange.html
             mask = cv2.inRange(hsv, hsv_lower, hsv_upper)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+            opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+            closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
+
+            contours = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = contours[0] if len(contours) == 2 else contours[1]
+
+            minimum_area = 1500
+            average_cell_area = 1600
+            connected_cell_area = 2000
+            pills = 0
+
+            for c in contours:
+                area = cv2.contourArea(c)
+                if area > minimum_area:
+                    cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
+                    if area > connected_cell_area:
+                        pills += math.ceil(area / average_cell_area)
+                    else:
+                        pills += 1
+
+            self.set_pill_count(pills)
 
             image_provider = CVImageProvider.instance()
-            image_provider.set_cv_image(self._image_path, mask)
+            image_provider.set_cv_image(self._image_path, image)
             self.increment_image_count()
         except cv2.error as e:
             print("cv2.error: " + str(e))
