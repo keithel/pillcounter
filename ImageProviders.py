@@ -56,13 +56,18 @@ class CVImageProvider(QQuickImageProvider):
             CVImageProvider._instance = CVImageProvider()
         return CVImageProvider._instance
 
+    def cv_image_index(self, id):
+        return id.split("?", 1)[0]
+
     def set_cv_image(self, id, cv_image):
-        self._cv_images[id] = cv_image
+        image_idx = self.cv_image_index(id)
+        self._cv_images[image_idx] = cv_image
 
     def requestImage(self, id, size, requestedSize):
         print(f"requestImage(self, {id}, {str(size)}, {str(requestedSize)}")
+        image_idx = self.cv_image_index(id)
         try:
-            cv_image = self._cv_images[id]
+            cv_image = self._cv_images[image_idx]
         except KeyError:
             return QImage()
 

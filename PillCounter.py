@@ -16,12 +16,14 @@ QML_IMPORT_MAJOR_VERSION = 1
 class PillCounter(QObject):
     image_format_changed = Signal()
     image_path_changed = Signal()
+    image_count_changed = Signal()
     pill_count_changed = Signal()
 
     def __init__(self):
         super().__init__()
         self._image_format = "None"
         self._image_path = ""
+        self._image_count = 0
         self._pill_count = -1
 
     def get_image_format(self):
@@ -59,6 +61,14 @@ class PillCounter(QObject):
         mask = cv2.inRange(hsv, hsv_lower, hsv_upper)
         image_provider = CVImageProvider.instance()
         image_provider.set_cv_image(self._image_path, mask)
+        self.increment_image_count()
+
+    def get_image_count(self):
+        return self._image_count
+
+    def increment_image_count(self):
+        self._image_count += 1
+        self.image_count_changed.emit()
 
     def get_pill_count(self):
         return self._pill_count
@@ -70,4 +80,5 @@ class PillCounter(QObject):
     image_format = Property(str, get_image_format, notify=image_format_changed)
     image_path = Property(str, get_image_path, set_image_path,
                           notify=image_path_changed)
+    image_count = Property(int, get_image_count, notify=image_count_changed)
     pill_count = Property(int, get_pill_count, notify=pill_count_changed)

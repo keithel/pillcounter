@@ -42,7 +42,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: 10
 
-                source: "image://cv/" + imagePath
+                source: "image://cv/" + imagePath + "?count=" + pillCounter.image_count
             }
         }
 
