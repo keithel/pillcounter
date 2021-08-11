@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 import math
 from ImageProviders import CVImageProvider
-from time import sleep
+import imutils
 
 QML_IMPORT_NAME = "io.qt.dev"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -29,7 +29,7 @@ class ImageProcessor(QThread):
     @Slot()
     def process_image(self):
         """Do the work of processing the image and returning data about the image"""
-        image, image_blur, image_blur_gray, image_thresh, opening = (None, None, None, None, None)
+        image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count = (None, None, None, None, None, None, -1)
 
         try:
             print(f"Processing image {self._image_path} with gray threshold: {self._gray_threshold}")
@@ -42,31 +42,36 @@ class ImageProcessor(QThread):
             image_blur = cv2.medianBlur(image, 25)
             image_blur_gray = cv2.cvtColor(image_blur, cv2.COLOR_BGR2GRAY)
             _, image_thresh = cv2.threshold(image_blur_gray, self._gray_threshold, 255, cv2.THRESH_BINARY)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15,15))
-            opening = cv2.morphologyEx(image_thresh, cv2.MORPH_OPEN, kernel)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (50,50))
+            closing = cv2.morphologyEx(image_thresh, cv2.MORPH_CLOSE, kernel)
+            opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel)
+            # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+            # dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
+            # _, last_image = cv2.threshold(dist_transform, 0.3*dist_transform.max(), 255, 0)
+            # last_image = np.uint8(last_image)
 
-            # contours = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # contours = contours[0] if len(contours) == 2 else contours[1]
+            contours = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = imutils.grab_contours(contours)
 
-            # minimum_area = 1500
-            # average_cell_area = 1600
-            # connected_cell_area = 2000
-            # pills = 0
+            # Need a way to filter out area outliers - those contours that are too big or too small.
+            # This I think will involve finding the median of contour areas, and adding some +- factor to use
+            # to determine what is a 'good' contour.
+            contour_areas = [cv2.contourArea(c) for c in contours]
+            contour_areas.sort()
+            median_area = contour_areas[round(len(contour_areas)/2)]
+            area_thresh = 5000
+            pill_contours = [c for c in contours if (cv2.contourArea(c) < median_area + area_thresh and cv2.contourArea(c) > median_area - area_thresh)]
+            pill_count = len(pill_contours)
 
-            # for c in contours:
-            #     area = cv2.contourArea(c)
-            #     if area > minimum_area:
-            #         cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
-            #         if area > connected_cell_area:
-            #             pills += math.ceil(area / average_cell_area)
-            #         else:
-            #             pills += 1
-
-            # self.set_pill_count(pills)
-
+            for (i,c) in enumerate(pill_contours):
+                ((x,y), _) = cv2.minEnclosingCircle(c)
+                cv2.putText(image, f"#{i+1}", (int(x)-45, int(y)+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 5)
+                cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
+                print(f"Contour {i} area: {cv2.contourArea(c)}")
         except cv2.error as e:
             print("cv2.error: " + str(e))
-        self.processed.emit((image, image_blur, image_blur_gray, image_thresh, opening))
+
+        self.processed.emit((image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count))
 
     @Slot(str)
     def set_image_path(self, image_path):
@@ -92,7 +97,7 @@ class PillCounter(QObject):
         self._image_path = ""
         self._image_count = 0
         self._pill_count = -1
-        self._gray_threshold = 192
+        self._gray_threshold = 190
 
         self.image_processor = ImageProcessor(self._image_path, self._gray_threshold)
         # self.image_processor.moveToThread(self.thread)
@@ -119,15 +124,18 @@ class PillCounter(QObject):
 
     def update_image_provider(self, images):
         print("Images: " + str(len(images)))
-        image, image_blur, image_blur_gray, image_thresh, opening = images
+        image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count = images
         image_provider = CVImageProvider.instance()
         image_provider.set_cv_image("orig_" + self._image_path, image)
         image_provider.set_cv_image("1_" + self._image_path, image_blur)
         image_provider.set_cv_image("2_" + self._image_path, image_blur_gray)
         image_provider.set_cv_image("3_" + self._image_path, image_thresh)
-        image_provider.set_cv_image("4_" + self._image_path, opening)
-        image_provider.set_cv_image(self._image_path, image_thresh)
+        image_provider.set_cv_image("4_" + self._image_path, closing)
+        image_provider.set_cv_image("5_" + self._image_path, opening)
+        # image_provider.set_cv_image("6_" + self._image_path, last_image)
+        image_provider.set_cv_image(self._image_path, opening)
         self.increment_image_count()
+        self.set_pill_count(pill_count)
 
     def get_image_format(self):
         return self._image_format

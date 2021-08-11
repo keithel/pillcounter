@@ -2,12 +2,13 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import io.qt.dev
+import Qt.labs.platform
 
 ApplicationWindow {
     id: window
     visible: true
-    width: 640
-    height: 480
+    width: 1024
+    height: 768
 
     onClosing: function (close) {
         pillCounter.quit()
@@ -16,8 +17,8 @@ ApplicationWindow {
     Component.onCompleted: {
         pillCounter.activate()
         imagePath = "pills1.jpg"
-        imagePathPrefix = "3_"
-        toolBarRowLayout.children[3].toggle()
+        imagePathPrefix = "orig_"
+        toolBarRowLayout.children[0].toggle()
         image.source = Qt.binding(function() { return "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count; } )
     }
 
@@ -50,7 +51,7 @@ ApplicationWindow {
                 onClicked: imagePathPrefix = "orig_"
             }
             Repeater {
-                model: 4
+                model: 5
                 delegate: ToolButton {
                     checkable: true
                     text: "Step " + (modelData+1)
@@ -159,13 +160,22 @@ ApplicationWindow {
                 }
                 Slider {
                     id: grayThresholdSlider
-                    KeyNavigation.tab: quitButton
+                    KeyNavigation.tab: loadButton
                     from: 0
                     to: 255
                     stepSize: 1
-                    value: 192  // 200
+                    value: 190  // 200
                 }
 
+                Button {
+                    id: loadButton
+                    KeyNavigation.tab: quitButton
+                    text: "Load Image"
+                    font.pixelSize: buttonFontPixelSize
+                    onClicked: {
+                        fileDialog.open()
+                    }
+                }
                 Button {
                     id: quitButton
                     KeyNavigation.tab: image
@@ -176,6 +186,13 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    FileDialog {
+        id: fileDialog
+        currentFile: imagePath
+        folder: StandardPaths.standardLocations(StandardPaths.DownloadsLocation)[0]
+        onAccepted: imagePath = currentFile.toString().substring(8)
     }
 
     SequentialAnimation {
