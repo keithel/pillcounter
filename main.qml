@@ -9,6 +9,10 @@ ApplicationWindow {
     width: 640
     height: 480
 
+    onClosing: function (close) {
+        pillCounter.quit()
+    }
+
     Component.onCompleted: {
         pillCounter.activate()
         imagePath = "pills1.jpg"
