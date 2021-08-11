@@ -19,12 +19,7 @@ class PillCounter(QObject):
     image_path_changed = Signal()
     image_count_changed = Signal()
     pill_count_changed = Signal()
-    hue_low_changed = Signal()
-    hue_high_changed = Signal()
-    saturation_low_changed = Signal()
-    saturation_high_changed = Signal()
-    value_low_changed = Signal()
-    value_high_changed = Signal()
+    gray_threshold_changed = Signal()
 
     def __init__(self):
         super().__init__()
@@ -32,21 +27,11 @@ class PillCounter(QObject):
         self._image_path = ""
         self._image_count = 0
         self._pill_count = -1
-        self._hue_low = 0
-        self._hue_high = 180
-        self._saturation_low = 0
-        self._saturation_high = 255
-        self._value_low = 0
-        self._value_high = 255
+        self._gray_threshold = 192
 
     @Slot()
     def activate(self):
-        self.hue_low_changed.connect(self.process_image)
-        self.hue_high_changed.connect(self.process_image)
-        self.saturation_low_changed.connect(self.process_image)
-        self.saturation_high_changed.connect(self.process_image)
-        self.value_low_changed.connect(self.process_image)
-        self.value_high_changed.connect(self.process_image)
+        self.gray_threshold_changed.connect(self.process_image)
 
     @Slot()
     def update(self):
@@ -54,48 +39,45 @@ class PillCounter(QObject):
 
     def process_image(self):
         try:
-            print(f"Processing image {self._image_path} with hsv thresholds: h {self._hue_low}-{self._hue_high}, s {self._saturation_low}-{self._saturation_high}, v {self._value_low}-{self._value_high}")
+            print(f"Processing image {self._image_path} with gray threshold: {self._gray_threshold}")
             # Kick off work to count pills
             # Going to see if this technique will work for pills:
             # https://stackoverflow.com/questions/58751101/count-number-of-cells-in-the-image
             # https://stackoverflow.com/questions/17239253/opencv-bgr2hsv-creates-lots-of-artifacts
             image = cv2.imread(self._image_path)
     #        original = image.copy()
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            image_blur = cv2.medianBlur(image, 25)
+            image_blur_gray = cv2.cvtColor(image_blur, cv2.COLOR_BGR2GRAY)
+            _, image_thresh = cv2.threshold(image_blur_gray, self._gray_threshold, 255, cv2.THRESH_BINARY)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15,15))
+            opening = cv2.morphologyEx(image_thresh, cv2.MORPH_OPEN, kernel)
 
-            hsv_lower = np.array([self._hue_low, self._saturation_low,
-                                  self._value_low])  # [156, 60, 0])
-            hsv_upper = np.array([self._hue_high, self._saturation_high,
-                                  self._value_high])  # [179, 115, 255])
+            # contours = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # contours = contours[0] if len(contours) == 2 else contours[1]
 
-            # https://docs.opencv.org/3.4/da/d97/tutorial_threshold_inRange.html
-            mask = cv2.inRange(hsv, hsv_lower, hsv_upper)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
-            opening = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
-            closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
+            # minimum_area = 1500
+            # average_cell_area = 1600
+            # connected_cell_area = 2000
+            # pills = 0
 
-            contours = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            contours = contours[0] if len(contours) == 2 else contours[1]
+            # for c in contours:
+            #     area = cv2.contourArea(c)
+            #     if area > minimum_area:
+            #         cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
+            #         if area > connected_cell_area:
+            #             pills += math.ceil(area / average_cell_area)
+            #         else:
+            #             pills += 1
 
-            minimum_area = 1500
-            average_cell_area = 1600
-            connected_cell_area = 2000
-            pills = 0
-
-            for c in contours:
-                area = cv2.contourArea(c)
-                if area > minimum_area:
-                    cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
-                    if area > connected_cell_area:
-                        pills += math.ceil(area / average_cell_area)
-                    else:
-                        pills += 1
-
-            self.set_pill_count(pills)
+            # self.set_pill_count(pills)
 
             image_provider = CVImageProvider.instance()
-            image_provider.set_cv_image(self._image_path, image)
+            image_provider.set_cv_image("orig_" + self._image_path, image)
+            image_provider.set_cv_image("1_" + self._image_path, image_blur)
+            image_provider.set_cv_image("2_" + self._image_path, image_blur_gray)
+            image_provider.set_cv_image("3_" + self._image_path, image_thresh)
+            image_provider.set_cv_image("4_" + self._image_path, opening)
+            image_provider.set_cv_image(self._image_path, image_thresh)
             self.increment_image_count()
         except cv2.error as e:
             print("cv2.error: " + str(e))
@@ -137,61 +119,17 @@ class PillCounter(QObject):
         self._pill_count = pill_count
         self.pill_count_changed.emit()
 
-    def get_hue_low(self):
-        return self._hue_low
+    def get_gray_threshold(self):
+        return self._gray_threshold
 
-    def set_hue_low(self, low):
-        self._hue_low = low
-        self.hue_low_changed.emit()
-
-    def get_hue_high(self):
-        return self._hue_high
-
-    def set_hue_high(self, high):
-        self._hue_high = high
-        self.hue_high_changed.emit()
-
-    def get_saturation_low(self):
-        return self._saturation_low
-
-    def set_saturation_low(self, low):
-        self._saturation_low = low
-        self.saturation_low_changed.emit()
-
-    def get_saturation_high(self):
-        return self._saturation_high
-
-    def set_saturation_high(self, high):
-        self._saturation_high = high
-        self.saturation_high_changed.emit()
-
-    def get_value_low(self):
-        return self._value_low
-
-    def set_value_low(self, low):
-        self._value_low = low
-        self.value_low_changed.emit()
-
-    def get_value_high(self):
-        return self._value_high
-
-    def set_value_high(self, high):
-        self._value_high = high
-        self.value_high_changed.emit()
+    def set_gray_threshold(self, threshold):
+        self._gray_threshold = threshold
+        self.gray_threshold_changed.emit()
 
     image_format = Property(str, get_image_format, notify=image_format_changed)
     image_path = Property(str, get_image_path, set_image_path,
                           notify=image_path_changed)
     image_count = Property(int, get_image_count, notify=image_count_changed)
     pill_count = Property(int, get_pill_count, notify=pill_count_changed)
-    hue_low = Property(int, get_hue_low, set_hue_low, notify=hue_low_changed)
-    hue_high = Property(int, get_hue_high, set_hue_high,
-                        notify=hue_high_changed)
-    saturation_low = Property(int, get_saturation_low, set_saturation_low,
-                              notify=saturation_low_changed)
-    saturation_high = Property(int, get_saturation_high, set_saturation_high,
-                               notify=saturation_high_changed)
-    value_low = Property(int, get_value_low, set_value_low,
-                         notify=value_low_changed)
-    value_high = Property(int, get_value_high, set_value_high,
-                          notify=value_high_changed)
+    gray_threshold = Property(int, get_gray_threshold, set_gray_threshold,
+                          notify=gray_threshold_changed)
