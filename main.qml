@@ -68,6 +68,7 @@ ApplicationWindow {
 
         Image {
             id: image
+            fillMode: Image.PreserveAspectFit
             anchors {
                 top: parent.top
                 left: parent.left
@@ -191,7 +192,7 @@ ApplicationWindow {
     FileDialog {
         id: fileDialog
         currentFile: imagePath
-        folder: StandardPaths.standardLocations(StandardPaths.DownloadsLocation)[0]
+        folder: StandardPaths.standardLocations(StandardPaths.DownloadLocation)[0]
         onAccepted: imagePath = currentFile.toString().substring(8)
     }
 

@@ -26,10 +26,30 @@ class ImageProcessor(QThread):
     # This is what we want, as we want to get the asynchronous slot calls from
     # the main thread, so we don't override run().
 
+    def rotate_90(self, image):
+        degrees = 90
+        if image is None:
+            return
+        size = image.shape[1::-1]
+        image_center = tuple(np.array(size) / 2)
+        rotation_matrix = cv2.getRotationMatrix2D(image_center, degrees, 1)
+        radians = math.radians(degrees)
+        sin = math.sin(radians)
+        cos = math.cos(radians)
+        b_w = int((size[1] * abs(sin)) + (size[0] * abs(cos)))
+        b_h = int((size[1] * abs(cos)) + (size[0] * abs(sin)))
+
+        rotation_matrix[0, 2] += ((b_w / 2) - image_center[0])
+        rotation_matrix[1, 2] += ((b_h / 2) - image_center[1])
+
+        result = cv2.warpAffine(image, rotation_matrix, (b_w, b_h), flags=cv2.INTER_LINEAR)
+
+        return result
+
     @Slot()
     def process_image(self):
         """Do the work of processing the image and returning data about the image"""
-        image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count = (None, None, None, None, None, None, -1)
+        image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count = (None, None, None, None, None, None, 0)
 
         try:
             print(f"Processing image {self._image_path} with gray threshold: {self._gray_threshold}")
@@ -38,6 +58,8 @@ class ImageProcessor(QThread):
             # https://stackoverflow.com/questions/58751101/count-number-of-cells-in-the-image
             # https://stackoverflow.com/questions/17239253/opencv-bgr2hsv-creates-lots-of-artifacts
             image = cv2.imread(self._image_path)
+            if image.shape[0] > image.shape[1]:
+                image = self.rotate_90(image)
     #        original = image.copy()
             image_blur = cv2.medianBlur(image, 25)
             image_blur_gray = cv2.cvtColor(image_blur, cv2.COLOR_BGR2GRAY)
@@ -53,21 +75,22 @@ class ImageProcessor(QThread):
             contours = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             contours = imutils.grab_contours(contours)
 
-            # Need a way to filter out area outliers - those contours that are too big or too small.
-            # This I think will involve finding the median of contour areas, and adding some +- factor to use
-            # to determine what is a 'good' contour.
-            contour_areas = [cv2.contourArea(c) for c in contours]
-            contour_areas.sort()
-            median_area = contour_areas[round(len(contour_areas)/2)]
-            area_thresh = 5000
-            pill_contours = [c for c in contours if (cv2.contourArea(c) < median_area + area_thresh and cv2.contourArea(c) > median_area - area_thresh)]
-            pill_count = len(pill_contours)
+            if len(contours) > 0:
+                # Need a way to filter out area outliers - those contours that are too big or too small.
+                # This I think will involve finding the median of contour areas, and adding some +- factor to use
+                # to determine what is a 'good' contour.
+                contour_areas = [cv2.contourArea(c) for c in contours]
+                contour_areas.sort()
+                median_area = contour_areas[round(len(contour_areas)/2)]
+                area_thresh = 5000
+                pill_contours = [c for c in contours if (cv2.contourArea(c) < median_area + area_thresh and cv2.contourArea(c) > median_area - area_thresh)]
+                pill_count = len(pill_contours)
 
-            for (i,c) in enumerate(pill_contours):
-                ((x,y), _) = cv2.minEnclosingCircle(c)
-                cv2.putText(image, f"#{i+1}", (int(x)-45, int(y)+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 5)
-                cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
-                print(f"Contour {i} area: {cv2.contourArea(c)}")
+                for (i,c) in enumerate(pill_contours):
+                    ((x,y), _) = cv2.minEnclosingCircle(c)
+                    cv2.putText(image, f"#{i+1}", (int(x)-45, int(y)+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 5)
+                    cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
+                    print(f"Contour {i} area: {cv2.contourArea(c)}")
         except cv2.error as e:
             print("cv2.error: " + str(e))
 

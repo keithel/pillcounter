@@ -69,7 +69,9 @@ class CVImageProvider(QQuickImageProvider):
         try:
             cv_image = self._cv_images[image_idx]
         except KeyError:
-            return QImage()
+            image = QImage(requestedSize.width(), requestedSize.height(), QImage.Format_BGR888)
+            image.fill(QColor("transparent"))
+            return image
 
         qimage = QImage_from_cv_image(cv_image)
 
