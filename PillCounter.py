@@ -163,9 +163,9 @@ class PillCounter(QObject):
         self._image_path = "pillCamera"
         self._image_count = 0
         self._pill_count = -1
-        self._blur_aperture = 25 # 13 for brown ibuprofen and atomoxetine caplets
-        self._gray_threshold = 190 # 135
-        self._kernel_size = 50 # 19
+        self._blur_aperture = 13 # for brown ibuprofen and atomoxetine caplets
+        self._gray_threshold = 135
+        self._kernel_size = 19
         self._closing_enabled = True
         self._opening_enabled = False
 
