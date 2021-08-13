@@ -1,5 +1,5 @@
 # This Python file uses the following encoding: utf-8
-from PySide6.QtCore import QObject, Signal, Slot, Property, QThread, Qt
+from PySide6.QtCore import QObject, Signal, Slot, Property, QThread, Qt, QTimer
 from PySide6.QtQml import QmlElement
 
 import os
@@ -17,10 +17,28 @@ QML_IMPORT_MAJOR_VERSION = 1
 class ImageProcessor(QThread):
     processed = Signal(object)
 
-    def __init__(self, image_path, gray_threshold):
+    def __init__(self, blur_aperture, gray_threshold, kernel_size, closing_enabled, opening_enabled):
         super().__init__()
-        self._image_path = image_path
+        self._blur_aperture = blur_aperture
         self._gray_threshold = gray_threshold
+        self._kernel_size = kernel_size
+        self._closing_enabled = closing_enabled
+        self._opening_enabled = opening_enabled
+        self._capture = cv2.VideoCapture(0)
+
+        if not self._capture.isOpened():
+            print("Can't open camera")
+            raise OSError(-1, "OpenCV cannot open camera", "0")
+
+        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        self._frameTimer = QTimer()
+        self._frameTimer.timeout.connect(self.process_image)
+        self._frameTimer.start(16)
+
+    def __del__(self):
+        self._capture.release()
 
     # Default run() method calls exec() which starts a Qt event loop.
     # This is what we want, as we want to get the asynchronous slot calls from
@@ -52,27 +70,34 @@ class ImageProcessor(QThread):
         image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count = (None, None, None, None, None, None, 0)
 
         try:
-            print(f"Processing image {self._image_path} with gray threshold: {self._gray_threshold}")
+            # print(f"Grabbing camera frame, processing with blur {self._blur_aperture}, gray threshold {self._gray_threshold}, kernel size {self._kernel_size}")
             # Kick off work to count pills
             # Going to see if this technique will work for pills:
             # https://stackoverflow.com/questions/58751101/count-number-of-cells-in-the-image
             # https://stackoverflow.com/questions/17239253/opencv-bgr2hsv-creates-lots-of-artifacts
-            image = cv2.imread(self._image_path)
+            grabbed, image = self._capture.read()
             if image.shape[0] > image.shape[1]:
                 image = self.rotate_90(image)
-    #        original = image.copy()
-            image_blur = cv2.medianBlur(image, 25)
+            image_blur = cv2.medianBlur(image, self._blur_aperture)
             image_blur_gray = cv2.cvtColor(image_blur, cv2.COLOR_BGR2GRAY)
             _, image_thresh = cv2.threshold(image_blur_gray, self._gray_threshold, 255, cv2.THRESH_BINARY)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (50,50))
-            closing = cv2.morphologyEx(image_thresh, cv2.MORPH_CLOSE, kernel)
-            opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel)
+
+            perform_contours_on = image_thresh
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self._kernel_size,self._kernel_size))
+
+            closing, opening = (None, None)
+            if self._closing_enabled:
+                closing = cv2.morphologyEx(image_thresh, cv2.MORPH_CLOSE, kernel)
+                perform_contours_on = closing
+            if self._opening_enabled:
+                opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel)
+                perform_contours_on = opening
             # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
             # dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
             # _, last_image = cv2.threshold(dist_transform, 0.3*dist_transform.max(), 255, 0)
             # last_image = np.uint8(last_image)
 
-            contours = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours = cv2.findContours(perform_contours_on, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             contours = imutils.grab_contours(contours)
 
             if len(contours) > 0:
@@ -86,49 +111,70 @@ class ImageProcessor(QThread):
                 pill_contours = [c for c in contours if (cv2.contourArea(c) < median_area + area_thresh and cv2.contourArea(c) > median_area - area_thresh)]
                 pill_count = len(pill_contours)
 
+                area_strs = [ f"{len(pill_contours)} contours. Areas: " ]
                 for (i,c) in enumerate(pill_contours):
                     ((x,y), _) = cv2.minEnclosingCircle(c)
                     cv2.putText(image, f"#{i+1}", (int(x)-45, int(y)+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 5)
                     cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
-                    print(f"Contour {i} area: {cv2.contourArea(c)}")
+                    area_strs.append(str(cv2.contourArea(c)).rjust(7))
+                    if (i < len(pill_contours)-1):
+                        area_strs.append(", ")
+                    # print(f"Contour {i} area: {cv2.contourArea(c)}")
+                print("".join(area_strs))
         except cv2.error as e:
             print("cv2.error: " + str(e))
 
         self.processed.emit((image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count))
 
-    @Slot(str)
-    def set_image_path(self, image_path):
-        self._image_path = image_path
-        self.process_image()
+    @Slot(int)
+    def set_blur_aperture(self, blur_aperture):
+        self._blur_aperture = blur_aperture
 
     @Slot(int)
     def set_gray_threshold(self, gray_threshold):
         self._gray_threshold = gray_threshold
-        self.process_image()
+
+    @Slot(int)
+    def set_kernel_size(self, kernel_size):
+        self._kernel_size = kernel_size
+
+    @Slot(bool)
+    def set_closing_enabled(self, closing_enabled):
+        self._closing_enabled = closing_enabled
+
+    @Slot(bool)
+    def set_opening_enabled(self, opening_enabled):
+        self._opening_enabled = opening_enabled
 
 @QmlElement
 class PillCounter(QObject):
     image_format_changed = Signal(str)
-    image_path_changed = Signal(str)
     image_count_changed = Signal(int)
     pill_count_changed = Signal(int)
+    blur_aperture_changed = Signal(int)
     gray_threshold_changed = Signal(int)
+    kernel_size_changed = Signal(int)
+    closing_enabled_changed = Signal(bool)
+    opening_enabled_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
         self._image_format = "None"
-        self._image_path = ""
+        self._image_path = "pillCamera"
         self._image_count = 0
         self._pill_count = -1
-        self._gray_threshold = 190
+        self._blur_aperture = 25 # 13 for brown ibuprofen and atomoxetine caplets
+        self._gray_threshold = 190 # 135
+        self._kernel_size = 50 # 19
+        self._closing_enabled = True
+        self._opening_enabled = False
 
-        self.image_processor = ImageProcessor(self._image_path, self._gray_threshold)
+        self.image_processor = ImageProcessor(self._blur_aperture, self._gray_threshold, self._kernel_size, self._closing_enabled, self._opening_enabled)
         # self.image_processor.moveToThread(self.thread)
         # self.thread.started.connect(self.image_processor.run)
         # self.image_processor.finished.connect(self.thread.quit)
         # self.image_processor.finished.connect(self.image_processor.deleteLater)
         # self.image_processor.finished.connect(self.thread.deleteLater)
-        self.image_path_changed.connect(self.image_processor.set_image_path, Qt.QueuedConnection)
         self.image_processor.processed.connect(self.update_image_provider, Qt.QueuedConnection)
         self.image_processor.start()
 
@@ -139,14 +185,13 @@ class PillCounter(QObject):
 
     @Slot()
     def activate(self):
+        self.blur_aperture_changed.connect(self.image_processor.set_blur_aperture, Qt.QueuedConnection)
         self.gray_threshold_changed.connect(self.image_processor.set_gray_threshold, Qt.QueuedConnection)
-
-    @Slot()
-    def update(self):
-        self.image_path_changed.emit(self._image_path)
+        self.kernel_size_changed.connect(self.image_processor.set_kernel_size, Qt.QueuedConnection)
+        self.closing_enabled_changed.connect(self.image_processor.set_closing_enabled, Qt.QueuedConnection)
+        self.opening_enabled_changed.connect(self.image_processor.set_opening_enabled, Qt.QueuedConnection)
 
     def update_image_provider(self, images):
-        print("Images: " + str(len(images)))
         image, image_blur, image_blur_gray, image_thresh, closing, opening, pill_count = images
         image_provider = CVImageProvider.instance()
         image_provider.set_cv_image("orig_" + self._image_path, image)
@@ -170,18 +215,6 @@ class PillCounter(QObject):
     def get_image_path(self):
         return self._image_path
 
-    def set_image_path(self, image_path):
-        self._image_path = image_path
-
-        # Validate if the path is valid
-        if not os.path.isfile(image_path):
-            return
-
-        # Validate if the file is in a supported image format.
-        self.set_image_format(imghdr.what(image_path))
-
-        self.image_path_changed.emit(self._image_path)
-
     def get_image_count(self):
         return self._image_count
 
@@ -196,6 +229,13 @@ class PillCounter(QObject):
         self._pill_count = pill_count
         self.pill_count_changed.emit(self._pill_count)
 
+    def get_blur_aperture(self):
+        return self._blur_aperture
+
+    def set_blur_aperture(self, blur_aperture):
+        self._blur_aperture = blur_aperture
+        self.blur_aperture_changed.emit(self._blur_aperture)
+
     def get_gray_threshold(self):
         return self._gray_threshold
 
@@ -203,10 +243,38 @@ class PillCounter(QObject):
         self._gray_threshold = threshold
         self.gray_threshold_changed.emit(self._gray_threshold)
 
+    def get_kernel_size(self):
+        return self._kernel_size
+
+    def set_kernel_size(self, kernel_size):
+        self._kernel_size = kernel_size
+        self.kernel_size_changed.emit(self._kernel_size)
+
+    def get_closing_enabled(self):
+        return self._closing_enabled
+
+    def set_closing_enabled(self, closing_enabled):
+        self._closing_enabled = closing_enabled
+        self.closing_enabled_changed.emit(self._closing_enabled)
+
+    def get_opening_enabled(self):
+        return self._opening_enabled
+
+    def set_opening_enabled(self, opening_enabled):
+        self._opening_enabled = opening_enabled
+        self.opening_enabled_changed.emit(self._opening_enabled)
+
     image_format = Property(str, get_image_format, notify=image_format_changed)
-    image_path = Property(str, get_image_path, set_image_path,
-                          notify=image_path_changed)
+    image_path = Property(str, get_image_path)
     image_count = Property(int, get_image_count, notify=image_count_changed)
     pill_count = Property(int, get_pill_count, notify=pill_count_changed)
+    blur_aperture = Property(int, get_blur_aperture, set_blur_aperture,
+                              notify=blur_aperture_changed)
     gray_threshold = Property(int, get_gray_threshold, set_gray_threshold,
                               notify=gray_threshold_changed)
+    kernel_size = Property(int, get_kernel_size, set_kernel_size,
+                              notify=kernel_size_changed)
+    closing_enabled = Property(int, get_closing_enabled, set_closing_enabled,
+                              notify=closing_enabled_changed)
+    opening_enabled = Property(int, get_opening_enabled, set_opening_enabled,
+                              notify=opening_enabled_changed)

@@ -9,7 +9,6 @@ from PySide6.QtCore import Qt
 def QImage_from_cv_image(cv_img):
     """Convert from an opencv image to QImage"""
     # https://gist.github.com/docPhil99/ca4da12c9d6f29b9cea137b617c7b8b1
-    print(f"cv_img.shape == {cv_img.shape}")
     cv_height, cv_width, cv_channels = (0, 0, 1)
     format = None
     if len(cv_img.shape) > 2:
@@ -64,7 +63,7 @@ class CVImageProvider(QQuickImageProvider):
         self._cv_images[image_idx] = cv_image
 
     def requestImage(self, id, size, requestedSize):
-        print(f"requestImage(self, {id}, {str(size)}, {str(requestedSize)}")
+        # print(f"requestImage(self, {id}, {str(size)}, {str(requestedSize)}")
         image_idx = self.cv_image_index(id)
         try:
             cv_image = self._cv_images[image_idx]

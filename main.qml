@@ -16,7 +16,6 @@ ApplicationWindow {
 
     Component.onCompleted: {
         pillCounter.activate()
-        imagePath = "pills1.jpg"
         imagePathPrefix = "orig_"
         toolBarRowLayout.children[0].toggle()
         image.source = Qt.binding(function() { return "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count; } )
@@ -27,14 +26,17 @@ ApplicationWindow {
     property real buttonFontPixelSize: (window.width <= 640) ? 18 : 27
     property real textFontPixelSize: (window.width <= 640) ? 18 : 27
     property string imagePathPrefix: ""
-    property string imagePath: ""
+    property alias imagePath: pillCounter.image_path
     property alias pillCount: pillCounter.pill_count
     property alias imageFormat: pillCounter.image_format
 
     PillCounter {
         id: pillCounter
-        image_path: imagePath
-        gray_threshold: grayThresholdSlider.value
+        blur_aperture: blurApertureDial.oddValue
+        gray_threshold: grayThresholdDial.value
+        kernel_size: kernelSizeDial.value
+        closing_enabled: morphCloseCheckbox.checked
+        opening_enabled: morphOpenCheckbox.checked
     }
 
     header: ToolBar {
@@ -77,7 +79,7 @@ ApplicationWindow {
                 margins: 10
             }
             focus: true
-            KeyNavigation.tab: grayThresholdSlider
+            KeyNavigation.tab: blurApertureDial
             Rectangle {
                 anchors.fill: parent
                 visible: parent.focus
@@ -156,44 +158,63 @@ ApplicationWindow {
 
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                Label {
-                    text: "Gray Threshold"
+                LabeledDial {
+                    id: blurApertureDial
+                    name: "Blur Aperture"
+                    property int oddFrom: 1
+                    property int oddTo: 35
+                    property int oddValue: value*2-1
+                    KeyNavigation.tab: grayThresholdDial // brightnessDial
+                    from: (oddFrom+1)/2
+                    to: (oddTo+1)/2
+                    stepSize: 1
+                    value: 13 // oddValue 25
+                    displayValue: oddValue
                 }
-                Slider {
-                    id: grayThresholdSlider
-                    KeyNavigation.tab: loadButton
+                LabeledDial {
+                    id: grayThresholdDial
+                    name: "Gray Thresh"
+                    KeyNavigation.tab: kernelSizeDial
                     from: 0
                     to: 255
                     stepSize: 1
                     value: 190  // 200
                 }
-
-                Button {
-                    id: loadButton
-                    KeyNavigation.tab: quitButton
-                    text: "Load Image"
-                    font.pixelSize: buttonFontPixelSize
-                    onClicked: {
-                        fileDialog.open()
-                    }
+                LabeledDial {
+                    id: kernelSizeDial
+                    name: "Kernel Size"
+                    KeyNavigation.tab: morphCloseCheckbox
+                    from: 0
+                    to: 80
+                    stepSize: 1
+                    value: 50
                 }
+                Label {
+                    text: "Morph Close"
+                }
+                CheckBox {
+                    id: morphCloseCheckbox
+                    KeyNavigation.tab: morphOpenCheckbox
+                    checked: true
+                }
+                Label {
+                    text: "Morph Open"
+                }
+                CheckBox {
+                    id: morphOpenCheckbox
+                    KeyNavigation.tab: quitButton
+                    checked: false
+                }
+
                 Button {
                     id: quitButton
                     KeyNavigation.tab: image
-//                    background: Item {}
                     text: "Quit"
                     font.pixelSize: buttonFontPixelSize
                     onClicked: quitAnim.start()
                 }
             }
         }
-    }
-
-    FileDialog {
-        id: fileDialog
-        currentFile: imagePath
-        folder: StandardPaths.standardLocations(StandardPaths.DownloadLocation)[0]
-        onAccepted: imagePath = currentFile.toString().substring(8)
     }
 
     SequentialAnimation {
