@@ -107,19 +107,28 @@ class ImageProcessor(QThread):
                 contour_areas = [cv2.contourArea(c) for c in contours]
                 contour_areas.sort()
                 median_area = contour_areas[round(len(contour_areas)/2)]
-                area_thresh = 5000
+                area_thresh = median_area * 0.2 # 20% of the median area
                 pill_contours = [c for c in contours if (cv2.contourArea(c) < median_area + area_thresh and cv2.contourArea(c) > median_area - area_thresh)]
                 pill_count = len(pill_contours)
 
                 area_strs = [ f"{len(pill_contours)} contours. Areas: " ]
-                for (i,c) in enumerate(pill_contours):
+                for (i,c) in enumerate(contours):
+                    area = cv2.contourArea(c)
                     ((x,y), _) = cv2.minEnclosingCircle(c)
-                    cv2.putText(image, f"#{i+1}", (int(x)-45, int(y)+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 5)
-                    cv2.drawContours(image, [c], -1, (80, 10, 255), 2)
-                    area_strs.append(str(cv2.contourArea(c)).rjust(7))
-                    if (i < len(pill_contours)-1):
-                        area_strs.append(", ")
-                    # print(f"Contour {i} area: {cv2.contourArea(c)}")
+                    if area < median_area + area_thresh and area > median_area - area_thresh:
+                        # TODO: Handle pills touching - include 2x, 3x, 4x median_area +/- area_thresh.
+                        # TODO: To handle any multiple, make condition: if area % median_area < area_thresh and (area % median_area - median_area) > -area_thresh
+                        # TODO: Then, pill_count will have to be adjusted by area / median_area or area / median_area+1 depending on where the error is.
+                        cv2.putText(image, f"#{i+1}", (int(x)-12, int(y)+5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+                        cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
+                        area_strs.append(str(cv2.contourArea(c)))
+                        if (i < len(pill_contours)-1):
+                            area_strs.append(", ")
+                    else:
+                        # Contours that aren't identified as pills.
+                        cv2.putText(image, f"#{i+1}", (int(x)-12, int(y)+5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+                        cv2.drawContours(image, [c], -1, (0, 0, 127), 2)
+
                 print("".join(area_strs))
         except cv2.error as e:
             print("cv2.error: " + str(e))
