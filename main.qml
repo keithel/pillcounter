@@ -168,7 +168,7 @@ ApplicationWindow {
                     from: (oddFrom+1)/2
                     to: (oddTo+1)/2
                     stepSize: 1
-                    value: 13 // oddValue 25
+                    value: 7 // oddValue 13
                     displayValue: oddValue
                 }
                 LabeledDial {
@@ -178,7 +178,7 @@ ApplicationWindow {
                     from: 0
                     to: 255
                     stepSize: 1
-                    value: 190  // 200
+                    value: 135
                 }
                 LabeledDial {
                     id: kernelSizeDial
@@ -187,7 +187,7 @@ ApplicationWindow {
                     from: 0
                     to: 80
                     stepSize: 1
-                    value: 50
+                    value: 19
                 }
                 Label {
                     text: "Morph Close"
