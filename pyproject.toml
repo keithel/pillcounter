@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PillCounter"
+version = "0.1.0"
+description = "A PySide6 and OpenCV application to count pills from a camera feed."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "GPL-3.0-only"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License-Expression :: GPL-3.0-only",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Framework :: Qt",
+]
+
+dependencies = [
+    "PySide6",
+    "opencv-python",
+    "numpy",
+    "imutils",
+]
+
+# This new section defines the command to run your application
+[project.scripts]
+run-pillcounter = "pillcounter.main:main"
+
+[tool.pyside6-project]
+files = ["src/pillcounter/main.py","src/pillcounter/main.qml","src/pillcounter/LabeledDial.qml","src/pillcounter/ImageProviders.py","src/pillcounter/PillCounter.py"]
+
+[project.urls]
+"Homepage" = "https://github.com/keithel/pillcounter"
+"Bug Tracker" = "https://github.com/keithel/pillcounter/issues"

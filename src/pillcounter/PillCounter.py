@@ -2,12 +2,10 @@
 from PySide6.QtCore import QObject, Signal, Slot, Property, QThread, Qt, QTimer
 from PySide6.QtQml import QmlElement
 
-import os
-import imghdr
 import cv2
 import numpy as np
 import math
-from ImageProviders import CVImageProvider
+from .ImageProviders import CVImageProvider
 import imutils
 
 QML_IMPORT_NAME = "io.qt.dev"

@@ -5,15 +5,23 @@ import sys
 
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
-from ImageProviders import ColorImageProvider, CVImageProvider
-import PillCounter
+from .ImageProviders import ColorImageProvider, CVImageProvider
+from . import PillCounter
 
-if __name__ == "__main__":
+def main():
+    """Main function to set up and run the Qt application."""
     app = QGuiApplication(sys.argv)
     engine = QQmlApplicationEngine()
     engine.addImageProvider("colors", ColorImageProvider())
     engine.addImageProvider("cv", CVImageProvider.instance())
-    engine.load(os.fspath(Path(__file__).resolve().parent / "main.qml"))
+
+    # Correct path resolving for QML file when installed as a package
+    qml_file = os.fspath(Path(__file__).resolve().parent / "main.qml")
+    engine.load(qml_file)
+
     if not engine.rootObjects():
         sys.exit(-1)
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
