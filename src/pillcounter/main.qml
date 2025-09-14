@@ -54,7 +54,7 @@ ApplicationWindow {
         }
     }
 
-    Item {
+    ColumnLayout {
         id: windowContent
         anchors.fill: parent
         anchors.margins: 10
@@ -62,8 +62,8 @@ ApplicationWindow {
         Image {
             id: image
             fillMode: Image.PreserveAspectFit
-            anchors.fill: parent
-            anchors.bottomMargin: 120
+            Layout.fillWidth: true
+            Layout.fillHeight: true
 
             MouseArea {
                 anchors.fill: parent
@@ -73,117 +73,108 @@ ApplicationWindow {
             }
         }
 
-        ColumnLayout {
-            id: descriptionAndButsLayout
-            anchors {
-                bottom: parent.bottom
-                left: parent.left
-                right: parent.right
-            }
-
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.bottomMargin: 20
-                horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: textFontPixelSize
-                text: {
-                    if (pillCount >= 0) {
-                        if (imageMode) {
-                            return "Image " + (pillCounter.current_image_index + 1) + ": Detected " + pillCount + " pills."
-                        } else {
-                            return "Live Mode: Detected " + pillCount + " pills."
-                        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.bottomMargin: 20
+            horizontalAlignment: Text.AlignHCenter
+            font.pixelSize: textFontPixelSize
+            text: {
+                if (pillCount >= 0) {
+                    if (imageMode) {
+                        return "Image " + (pillCounter.current_image_index + 1) + ": Detected " + pillCount + " pills."
                     } else {
-                        return "Initializing AI Model..."
+                        return "Live Mode: Detected " + pillCount + " pills."
+                    }
+                } else {
+                    return "Initializing AI Model..."
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 15
+
+            Button {
+                text: "Open Image(s)"
+                font.pixelSize: buttonFontPixelSize
+                onClicked: {
+                    pillCounter.setLiveMode(false)
+                    fileDialog.open()
+                }
+            }
+
+            Button {
+                text: "Live Mode"
+                font.pixelSize: buttonFontPixelSize
+                onClicked: pillCounter.setLiveMode(true)
+                highlighted: !imageMode
+            }
+
+            LabeledDial {
+                id: confidenceDial
+                name: "Confidence"
+                from: 0
+                to: 100
+                stepSize: 1
+                value: 49
+                displayValue: value + "%"
+
+                Component.onCompleted: increase();
+
+                Connections {
+                    function onValueChanged() {
+                        if (imageMode)
+                            pillCounter.processCurrentImage()
                     }
                 }
             }
 
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 15
+            // --- NEW: Font Size Dial ---
+            LabeledDial {
+                id: fontDial
+                name: "Font Size"
+                from: 2
+                to: 10 // from 0.1 to 1.0
+                stepSize: 1
+                value: 2 // Default to 0.3
+                displayValue: value / 10.0
 
-                Button {
-                    text: "Open Image(s)"
-                    font.pixelSize: buttonFontPixelSize
-                    onClicked: {
-                        pillCounter.setLiveMode(false)
-                        fileDialog.open()
+                Component.onCompleted: increase()
+
+                Connections {
+                    function onValueChanged() {
+                        if (imageMode)
+                            pillCounter.processCurrentImage()
                     }
                 }
+            }
+            // --- End of new section ---
 
-                Button {
-                    text: "Live Mode"
-                    font.pixelSize: buttonFontPixelSize
-                    onClicked: pillCounter.setLiveMode(true)
-                    highlighted: !imageMode
-                }
+            Button {
+                id: prevButton
+                text: "< Prev"
+                font.pixelSize: buttonFontPixelSize
+                visible: imageMode
+                enabled: pillCounter.current_image_index > 0
+                onClicked: pillCounter.previousImage()
+            }
+            Button {
+                id: nextButton
+                text: "Next >"
+                font.pixelSize: buttonFontPixelSize
+                visible: imageMode
+                enabled: pillCounter.current_image_index < pillCounter.static_image_count-1
+                onClicked: pillCounter.nextImage()
+            }
 
-                LabeledDial {
-                    id: confidenceDial
-                    name: "Confidence"
-                    from: 0
-                    to: 100
-                    stepSize: 1
-                    value: 49
-                    displayValue: value + "%"
+            Item { Layout.fillWidth: true }
 
-                    Component.onCompleted: increase();
-
-                    Connections {
-                        function onValueChanged() {
-                            if (imageMode)
-                                pillCounter.processCurrentImage()
-                        }
-                    }
-                }
-
-                // --- NEW: Font Size Dial ---
-                LabeledDial {
-                    id: fontDial
-                    name: "Font Size"
-                    from: 2
-                    to: 10 // from 0.1 to 1.0
-                    stepSize: 1
-                    value: 2 // Default to 0.3
-                    displayValue: value / 10.0
-
-                    Component.onCompleted: increase()
-
-                    Connections {
-                        function onValueChanged() {
-                            if (imageMode)
-                                pillCounter.processCurrentImage()
-                        }
-                    }
-                }
-                // --- End of new section ---
-
-                Button {
-                    id: prevButton
-                    text: "< Prev"
-                    font.pixelSize: buttonFontPixelSize
-                    visible: imageMode
-                    enabled: pillCounter.current_image_index > 0
-                    onClicked: pillCounter.previousImage()
-                }
-                Button {
-                    id: nextButton
-                    text: "Next >"
-                    font.pixelSize: buttonFontPixelSize
-                    visible: imageMode
-                    enabled: pillCounter.current_image_index < pillCounter.static_image_count-1
-                    onClicked: pillCounter.nextImage()
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Button {
-                    id: quitButton
-                    text: "Quit"
-                    font.pixelSize: buttonFontPixelSize
-                    onClicked: quitAnim.start()
-                }
+            Button {
+                id: quitButton
+                text: "Quit"
+                font.pixelSize: buttonFontPixelSize
+                onClicked: quitAnim.start()
             }
         }
     }
