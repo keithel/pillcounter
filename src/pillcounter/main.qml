@@ -36,8 +36,9 @@ ApplicationWindow {
         onImage_files_loaded: function(loaded) {
             imageMode = loaded
         }
-        // --- NEW: Bind confidence threshold to the new dial ---
         confidence_threshold: confidenceDial.value / 100.0
+        // --- NEW: Bind font size to the new dial ---
+        font_size: fontDial.value / 10.0
     }
 
     FileDialog {
@@ -118,15 +119,36 @@ ApplicationWindow {
                     highlighted: !imageMode
                 }
 
-                // --- NEW: Confidence Threshold Dial ---
                 LabeledDial {
                     id: confidenceDial
                     name: "Confidence"
                     from: 0
                     to: 100
                     stepSize: 1
-                    value: 50 // Default to 0.5 (50%)
+                    value: 49
                     displayValue: value + "%"
+
+                    Component.onCompleted: increase();
+
+                    Connections {
+                        function onValueChanged() {
+                            if (imageMode)
+                                pillCounter.processCurrentImage()
+                        }
+                    }
+                }
+
+                // --- NEW: Font Size Dial ---
+                LabeledDial {
+                    id: fontDial
+                    name: "Font Size"
+                    from: 2
+                    to: 10 // from 0.1 to 1.0
+                    stepSize: 1
+                    value: 2 // Default to 0.3
+                    displayValue: value / 10.0
+
+                    Component.onCompleted: increase()
 
                     Connections {
                         function onValueChanged() {

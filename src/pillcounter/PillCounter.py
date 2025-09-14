@@ -9,6 +9,7 @@ import numpy as np
 import math
 from .ImageProviders import CVImageProvider
 from ultralytics import YOLO # Import YOLO
+from ultralytics.utils.plotting import colors # Just need the color utility
 
 QML_IMPORT_NAME = "io.qt.dev"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -26,8 +27,8 @@ class ImageProcessor(QThread):
         self._camera_idx = -1
 
         # --- NEW: Add confidence attribute ---
-        self._confidence_threshold = 0.5 # Default confidence
-        # ---
+        self._confidence_threshold = -1 # Default confidence value, updated by QML
+        self._font_size = -1 # Default font size, Updated by QML
 
         model_path = Path(__file__).resolve().parent / "best.pt"
         print(f"Loading model from: {model_path}")
@@ -42,20 +43,49 @@ class ImageProcessor(QThread):
         return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
     def run_model(self, image):
+        if self._confidence_threshold == -1:
+            print(f"Invalid confidence threshold {self._confidence_threshold}")
+            return
         original_image = image.copy()
         if image.shape[0] > image.shape[1]:
             image = self.rotate_90(image)
             original_image = self.rotate_90(original_image)
 
-        # --- MODIFIED: Use the confidence threshold in the model call ---
         results = self.model(image, conf=self._confidence_threshold, verbose=False)
-        # ---
-
         pill_count = len(results[0].boxes)
-        annotated_frame = results[0].plot()
+
+        # --- NEW: Direct OpenCV annotation for full control ---
+        annotated_frame = image.copy()
+        for box in results[0].boxes:
+            # Get box coordinates, class, and confidence
+            x1, y1, x2, y2 = [round(x) for x in box.xyxy[0].tolist()]
+            class_id = int(box.cls)
+            class_letters = ['C', 'T' ]
+            confidence = float(box.conf)
+            confidence_str = f"{confidence:.2f}"[1:]
+            #label = f'{self.model.names[class_id]} {confidence:.2f}'
+            label = f'{class_letters[class_id]}{confidence_str}'
+            color = colors(class_id, True)
+            line_thickness = 1
+
+            # Draw the bounding box
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, line_thickness)
+
+            # --- Draw the text with a filled background ---
+            # Calculate text size
+            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, self._font_size, 1)
+
+            # Draw a filled rectangle behind the text for better visibility
+            #cv2.rectangle(annotated_frame, (x1, y1 - h - 5), (x1 + w, y1), color, -1)
+            # Draw the text on top
+            text_color = color#(255, 255,255)
+            cv2.putText(annotated_frame, label, (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, self._font_size, text_color, 1, cv2.LINE_AA)
+
+        # --- End of new section ---
 
         cv2.putText(annotated_frame, f"Total Pills: {pill_count}", (20, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
 
         self.processed.emit((annotated_frame, original_image, pill_count))
 
@@ -77,11 +107,13 @@ class ImageProcessor(QThread):
         except Exception as e:
             print(f"Error processing static image: {e}")
 
-    # --- NEW: Slot to receive confidence value from main thread ---
     @Slot(float)
     def set_confidence_threshold(self, threshold):
         self._confidence_threshold = threshold
-    # ---
+
+    @Slot(float)
+    def set_font_size(self, size):
+        self._font_size = size
 
     @Slot()
     def start_live_mode(self):
@@ -118,8 +150,8 @@ class PillCounter(QObject):
     pill_count_changed = Signal(int)
     image_files_loaded = Signal(bool)
     current_image_index_changed = Signal(int)
-    # --- NEW: Signal for confidence threshold ---
     confidence_threshold_changed = Signal(float)
+    font_size_changed = Signal(float)
 
     def __init__(self):
         super().__init__()
@@ -128,9 +160,8 @@ class PillCounter(QObject):
         self._pill_count = -1
         self._image_files = []
         self._current_image_index = -1
-        # --- NEW: Confidence property backend ---
-        self._confidence_threshold = 0.5
-        # ---
+        self._confidence_threshold = -1
+        self._font_size = -1
 
         self.image_processor = ImageProcessor()
         self.image_processor.processed.connect(self.update_image_provider, Qt.QueuedConnection)
@@ -144,9 +175,8 @@ class PillCounter(QObject):
 
     @Slot()
     def activate(self):
-        # --- NEW: Connect the signal to the processor's slot ---
         self.confidence_threshold_changed.connect(self.image_processor.set_confidence_threshold)
-        # ---
+        self.font_size_changed.connect(self.image_processor.set_font_size)
         self.setLiveMode(True)
 
     @Slot(list)
@@ -216,7 +246,6 @@ class PillCounter(QObject):
         self.pill_count_changed.emit(c)
     def get_current_image_index(self): return self._current_image_index
 
-    # --- NEW: Getter and Setter for the confidence threshold property ---
     def get_confidence_threshold(self):
         return self._confidence_threshold
 
@@ -224,12 +253,19 @@ class PillCounter(QObject):
         if self._confidence_threshold != threshold:
             self._confidence_threshold = threshold
             self.confidence_threshold_changed.emit(self._confidence_threshold)
-    # ---
+
+    def get_font_size(self):
+        return self._font_size
+
+    def set_font_size(self, size):
+        if self._font_size != size:
+            self._font_size = size
+            self.font_size_changed.emit(self._font_size)
 
     image_path = Property(str, get_image_path, constant=True)
     live_image_count = Property(int, get_live_image_count, notify=live_image_count_changed)
     static_image_count = Property(int, get_static_image_count, notify=static_image_count_changed)
     pill_count = Property(int, get_pill_count, notify=pill_count_changed)
     current_image_index = Property(int, get_current_image_index, notify=current_image_index_changed)
-    # --- NEW: Property declaration for QML ---
     confidence_threshold = Property(float, get_confidence_threshold, set_confidence_threshold, notify=confidence_threshold_changed)
+    font_size = Property(float, get_font_size, set_font_size, notify=font_size_changed)
