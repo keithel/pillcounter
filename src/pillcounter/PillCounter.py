@@ -23,6 +23,7 @@ class ImageProcessor(QThread):
         self._frameTimer = QTimer()
         self._frameTimer.timeout.connect(self.process_camera_frame)
         self.running = False
+        self._camera_idx = -1
 
         # --- NEW: Add confidence attribute ---
         self._confidence_threshold = 0.5 # Default confidence
@@ -86,12 +87,17 @@ class ImageProcessor(QThread):
     def start_live_mode(self):
         self.stop_processing()
         print("Starting live mode...")
-        self._capture = cv2.VideoCapture(0)
+        for i in range(5, -1, -1):
+            self._capture = cv2.VideoCapture(i)
+            if self._capture.isOpened():
+                self._camera_idx = i
+                break
         if not self._capture.isOpened():
             print("Can't open camera")
             return
         self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        print(f"Using camera {self._camera_idx}")
         self.running = True
         self._frameTimer.start(30)
 
