@@ -7,7 +7,6 @@ Dial {
     property string name: ""
     property alias displayValue: valueText.text
     font: label.font
-    KeyNavigation.tab: morphCloseCheckbox
     ColumnLayout {
         anchors.centerIn: parent
         Text {

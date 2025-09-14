@@ -17,7 +17,9 @@ ApplicationWindow {
     Component.onCompleted: {
         pillCounter.activate()
         imagePathPrefix = "annotated_"
-        image.source = Qt.binding(function() { return "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count; } )
+        image.source = Qt.binding(function() {
+            return pillCounter.image_count ? "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count : ""
+        } )
     }
 
     title: qsTr("Pill Counter (AI-Powered)")
