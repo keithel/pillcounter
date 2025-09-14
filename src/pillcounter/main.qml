@@ -16,7 +16,6 @@ ApplicationWindow {
 
     Component.onCompleted: {
         pillCounter.activate()
-        // --- MODIFIED: Start with the "annotated_" prefix ---
         imagePathPrefix = "annotated_"
         image.source = Qt.binding(function() { return "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count; } )
     }
@@ -28,7 +27,6 @@ ApplicationWindow {
     property string imagePathPrefix: ""
     property alias imagePath: pillCounter.image_path
     property alias pillCount: pillCounter.pill_count
-    property alias imageFormat: pillCounter.image_format
     property bool imageMode: false
 
     PillCounter {
@@ -36,6 +34,8 @@ ApplicationWindow {
         onImage_files_loaded: function(loaded) {
             imageMode = loaded
         }
+        // --- NEW: Bind confidence threshold to the new dial ---
+        confidence_threshold: confidenceDial.value / 100.0
     }
 
     FileDialog {
@@ -59,21 +59,11 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.bottomMargin: 120
 
-            // --- NEW: MouseArea to toggle view ---
             MouseArea {
                 anchors.fill: parent
-                onPressed: {
-                    // When pressed, switch to the unannotated image
-                    imagePathPrefix = "unannotated_"
-                }
-                onReleased: {
-                    // When released, switch back to the annotated image
-                    imagePathPrefix = "annotated_"
-                }
-                onCanceled: {
-                    // Also switch back if the press is canceled
-                    imagePathPrefix = "annotated_"
-                }
+                onPressed: { imagePathPrefix = "unannotated_" }
+                onReleased: { imagePathPrefix = "annotated_" }
+                onCanceled: { imagePathPrefix = "annotated_" }
             }
         }
 
@@ -120,6 +110,25 @@ ApplicationWindow {
                     highlighted: !imageMode
                 }
 
+                // --- NEW: Confidence Threshold Dial ---
+                LabeledDial {
+                    id: confidenceDial
+                    name: "Confidence"
+                    from: 0
+                    to: 100
+                    stepSize: 1
+                    value: 50 // Default to 0.5 (50%)
+                    displayValue: value + "%"
+
+                    Connections {
+                        function onValueChanged() {
+                            if (imageMode)
+                                pillCounter.processCurrentImage()
+                        }
+                    }
+                }
+                // --- End of new section ---
+
                 Button {
                     id: prevButton
                     text: "< Prev"
@@ -128,7 +137,6 @@ ApplicationWindow {
                     enabled: pillCounter.current_image_index > 0
                     onClicked: pillCounter.previousImage()
                 }
-
                 Button {
                     id: nextButton
                     text: "Next >"

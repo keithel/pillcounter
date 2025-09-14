@@ -22,7 +22,11 @@ class ImageProcessor(QThread):
         self._capture = None
         self._frameTimer = QTimer()
         self._frameTimer.timeout.connect(self.process_camera_frame)
-        self.running = False # Flag to control the processing loop
+        self.running = False
+
+        # --- NEW: Add confidence attribute ---
+        self._confidence_threshold = 0.5 # Default confidence
+        # ---
 
         model_path = Path(__file__).resolve().parent / "best.pt"
         print(f"Loading model from: {model_path}")
@@ -37,26 +41,25 @@ class ImageProcessor(QThread):
         return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
     def run_model(self, image):
-        """Runs the YOLO model on a single image and emits both original and annotated frames."""
-        original_image = image.copy() # Keep a copy of the original
+        original_image = image.copy()
         if image.shape[0] > image.shape[1]:
             image = self.rotate_90(image)
             original_image = self.rotate_90(original_image)
 
+        # --- MODIFIED: Use the confidence threshold in the model call ---
+        results = self.model(image, conf=self._confidence_threshold, verbose=False)
+        # ---
 
-        results = self.model(image, verbose=False)
         pill_count = len(results[0].boxes)
         annotated_frame = results[0].plot()
 
         cv2.putText(annotated_frame, f"Total Pills: {pill_count}", (20, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
 
-        # --- MODIFIED: Emit original frame, annotated frame, and count ---
         self.processed.emit((annotated_frame, original_image, pill_count))
 
     @Slot()
     def process_camera_frame(self):
-        """Processes a single frame from the camera."""
         if self.running and self._capture and self._capture.isOpened():
             grabbed, image = self._capture.read()
             if grabbed:
@@ -64,7 +67,6 @@ class ImageProcessor(QThread):
 
     @Slot(str)
     def process_static_image(self, image_path):
-        """Loads and processes a single static image file."""
         try:
             image = cv2.imread(image_path)
             if image is not None:
@@ -74,24 +76,27 @@ class ImageProcessor(QThread):
         except Exception as e:
             print(f"Error processing static image: {e}")
 
+    # --- NEW: Slot to receive confidence value from main thread ---
+    @Slot(float)
+    def set_confidence_threshold(self, threshold):
+        self._confidence_threshold = threshold
+    # ---
+
     @Slot()
     def start_live_mode(self):
-        """Starts the camera and the processing timer."""
-        self.stop_processing() # Ensure any previous state is cleared
+        self.stop_processing()
         print("Starting live mode...")
         self._capture = cv2.VideoCapture(0)
         if not self._capture.isOpened():
             print("Can't open camera")
             return
-
         self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.running = True
-        self._frameTimer.start(30) # Process at ~30 FPS
+        self._frameTimer.start(30)
 
     @Slot()
     def stop_processing(self):
-        """Stops the camera and the timer."""
         self.running = False
         self._frameTimer.stop()
         if self._capture:
@@ -105,19 +110,21 @@ class PillCounter(QObject):
     image_format_changed = Signal(str)
     image_count_changed = Signal(int)
     pill_count_changed = Signal(int)
-    # New signals to control the UI state
     image_files_loaded = Signal(bool)
     current_image_index_changed = Signal(int)
+    # --- NEW: Signal for confidence threshold ---
+    confidence_threshold_changed = Signal(float)
 
     def __init__(self):
         super().__init__()
-        self._image_format = "None"
         self._image_path = "pillCamera"
         self._image_count = 0
         self._pill_count = -1
-
         self._image_files = []
         self._current_image_index = -1
+        # --- NEW: Confidence property backend ---
+        self._confidence_threshold = 0.5
+        # ---
 
         self.image_processor = ImageProcessor()
         self.image_processor.processed.connect(self.update_image_provider, Qt.QueuedConnection)
@@ -131,6 +138,9 @@ class PillCounter(QObject):
 
     @Slot()
     def activate(self):
+        # --- NEW: Connect the signal to the processor's slot ---
+        self.confidence_threshold_changed.connect(self.image_processor.set_confidence_threshold)
+        # ---
         self.setLiveMode()
 
     @Slot(list)
@@ -171,21 +181,19 @@ class PillCounter(QObject):
             path = self._image_files[self._current_image_index]
             QMetaObject.invokeMethod(self.image_processor, "process_static_image", Qt.QueuedConnection, Q_ARG(str, path))
 
+    @Slot()
+    def processCurrentImage(self):
+        self.process_current_image()
+
     def update_image_provider(self, data):
-        # --- MODIFIED: Handle both annotated and original images ---
         annotated_image, original_image, pill_count = data
         image_provider = CVImageProvider.instance()
-        # Set both images in the provider with different prefixes
         image_provider.set_cv_image("annotated_" + self._image_path, annotated_image)
         image_provider.set_cv_image("unannotated_" + self._image_path, original_image)
 
         self.increment_image_count()
         self.set_pill_count(pill_count)
 
-    def get_image_format(self): return self._image_format
-    def set_image_format(self, f):
-        self._image_format = f
-        self.image_format_changed.emit(f)
     def get_image_path(self): return self._image_path
     def get_image_count(self): return self._image_count
     def increment_image_count(self):
@@ -197,8 +205,19 @@ class PillCounter(QObject):
         self.pill_count_changed.emit(c)
     def get_current_image_index(self): return self._current_image_index
 
-    image_format = Property(str, get_image_format, notify=image_format_changed)
-    image_path = Property(str, get_image_path)
+    # --- NEW: Getter and Setter for the confidence threshold property ---
+    def get_confidence_threshold(self):
+        return self._confidence_threshold
+
+    def set_confidence_threshold(self, threshold):
+        if self._confidence_threshold != threshold:
+            self._confidence_threshold = threshold
+            self.confidence_threshold_changed.emit(self._confidence_threshold)
+    # ---
+
+    image_path = Property(str, get_image_path, constant=True)
     image_count = Property(int, get_image_count, notify=image_count_changed)
     pill_count = Property(int, get_pill_count, notify=pill_count_changed)
     current_image_index = Property(int, get_current_image_index, notify=current_image_index_changed)
+    # --- NEW: Property declaration for QML ---
+    confidence_threshold = Property(float, get_confidence_threshold, set_confidence_threshold, notify=confidence_threshold_changed)
