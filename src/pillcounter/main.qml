@@ -18,7 +18,7 @@ ApplicationWindow {
         pillCounter.activate()
         imagePathPrefix = "annotated_"
         image.source = Qt.binding(function() {
-            return pillCounter.image_count ? "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count : ""
+            return pillCounter.live_image_count ? "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.live_image_count : ""
         } )
     }
 
@@ -144,6 +144,7 @@ ApplicationWindow {
                     text: "Next >"
                     font.pixelSize: buttonFontPixelSize
                     visible: imageMode
+                    enabled: pillCounter.current_image_index < pillCounter.static_image_count-1
                     onClicked: pillCounter.nextImage()
                 }
 

@@ -107,8 +107,8 @@ class ImageProcessor(QThread):
 
 @QmlElement
 class PillCounter(QObject):
-    image_format_changed = Signal(str)
-    image_count_changed = Signal(int)
+    live_image_count_changed = Signal(int)
+    static_image_count_changed = Signal(int)
     pill_count_changed = Signal(int)
     image_files_loaded = Signal(bool)
     current_image_index_changed = Signal(int)
@@ -118,7 +118,7 @@ class PillCounter(QObject):
     def __init__(self):
         super().__init__()
         self._image_path = "pillCamera"
-        self._image_count = 0
+        self._live_image_count = 0
         self._pill_count = -1
         self._image_files = []
         self._current_image_index = -1
@@ -154,6 +154,7 @@ class PillCounter(QObject):
             self.process_current_image()
         else:
             self.image_files_loaded.emit(False)
+        self.static_image_count_changed.emit(len(self._image_files))
 
     @Slot()
     def nextImage(self):
@@ -172,6 +173,7 @@ class PillCounter(QObject):
     @Slot()
     def setLiveMode(self):
         self._image_files = []
+        self.static_image_count_changed.emit(len(self._image_files))
         self._current_image_index = -1
         self.image_files_loaded.emit(False)
         QMetaObject.invokeMethod(self.image_processor, "start_live_mode", Qt.QueuedConnection)
@@ -190,15 +192,15 @@ class PillCounter(QObject):
         image_provider = CVImageProvider.instance()
         image_provider.set_cv_image("annotated_" + self._image_path, annotated_image)
         image_provider.set_cv_image("unannotated_" + self._image_path, original_image)
-
-        self.increment_image_count()
+        self.increment_live_image_count()
         self.set_pill_count(pill_count)
 
     def get_image_path(self): return self._image_path
-    def get_image_count(self): return self._image_count
-    def increment_image_count(self):
-        self._image_count += 1
-        self.image_count_changed.emit(self._image_count)
+    def get_live_image_count(self): return self._live_image_count
+    def get_static_image_count(self): return len(self._image_files)
+    def increment_live_image_count(self):
+        self._live_image_count += 1
+        self.live_image_count_changed.emit(self._live_image_count)
     def get_pill_count(self): return self._pill_count
     def set_pill_count(self, c):
         self._pill_count = c
@@ -216,7 +218,8 @@ class PillCounter(QObject):
     # ---
 
     image_path = Property(str, get_image_path, constant=True)
-    image_count = Property(int, get_image_count, notify=image_count_changed)
+    live_image_count = Property(int, get_live_image_count, notify=live_image_count_changed)
+    static_image_count = Property(int, get_static_image_count, notify=static_image_count_changed)
     pill_count = Property(int, get_pill_count, notify=pill_count_changed)
     current_image_index = Property(int, get_current_image_index, notify=current_image_index_changed)
     # --- NEW: Property declaration for QML ---
