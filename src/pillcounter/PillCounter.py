@@ -141,7 +141,7 @@ class PillCounter(QObject):
         # --- NEW: Connect the signal to the processor's slot ---
         self.confidence_threshold_changed.connect(self.image_processor.set_confidence_threshold)
         # ---
-        self.setLiveMode()
+        self.setLiveMode(True)
 
     @Slot(list)
     def loadImageFiles(self, file_urls):
@@ -170,13 +170,16 @@ class PillCounter(QObject):
             self.current_image_index_changed.emit(self._current_image_index)
             self.process_current_image()
 
-    @Slot()
-    def setLiveMode(self):
-        self._image_files = []
-        self.static_image_count_changed.emit(len(self._image_files))
-        self._current_image_index = -1
-        self.image_files_loaded.emit(False)
-        QMetaObject.invokeMethod(self.image_processor, "start_live_mode", Qt.QueuedConnection)
+    @Slot(bool)
+    def setLiveMode(self, enable):
+        if enable:
+            self._image_files = []
+            self.static_image_count_changed.emit(len(self._image_files))
+            self._current_image_index = -1
+            self.image_files_loaded.emit(False)
+            QMetaObject.invokeMethod(self.image_processor, "start_live_mode", Qt.QueuedConnection)
+        else:
+            self.image_processor.stop_processing()
 
     def process_current_image(self):
         if 0 <= self._current_image_index < len(self._image_files):

@@ -48,6 +48,9 @@ ApplicationWindow {
         onAccepted: {
             pillCounter.loadImageFiles(fileDialog.files)
         }
+        onRejected: {
+            pillCounter.setLiveMode(true)
+        }
     }
 
     Item {
@@ -102,13 +105,16 @@ ApplicationWindow {
                 Button {
                     text: "Open Image(s)"
                     font.pixelSize: buttonFontPixelSize
-                    onClicked: fileDialog.open()
+                    onClicked: {
+                        pillCounter.setLiveMode(false)
+                        fileDialog.open()
+                    }
                 }
 
                 Button {
                     text: "Live Mode"
                     font.pixelSize: buttonFontPixelSize
-                    onClicked: pillCounter.setLiveMode()
+                    onClicked: pillCounter.setLiveMode(true)
                     highlighted: !imageMode
                 }
 
