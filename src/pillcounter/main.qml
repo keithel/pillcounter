@@ -16,26 +16,36 @@ ApplicationWindow {
 
     Component.onCompleted: {
         pillCounter.activate()
-        // We only have one view now, the annotated result
         imagePathPrefix = "orig_"
         image.source = Qt.binding(function() { return "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count; } )
     }
 
-    title: qsTr("Pill Counter")
+    title: qsTr("Pill Counter (AI-Powered)")
 
-    property real buttonFontPixelSize: (window.width <= 640) ? 18 : 27
-    property real textFontPixelSize: (window.width <= 640) ? 18 : 27
+    property real buttonFontPixelSize: 20
+    property real textFontPixelSize: 22
     property string imagePathPrefix: ""
     property alias imagePath: pillCounter.image_path
     property alias pillCount: pillCounter.pill_count
     property alias imageFormat: pillCounter.image_format
+    property bool imageMode: false // To control UI visibility
 
     PillCounter {
         id: pillCounter
-        // --- REMOVED bindings to the old dials and checkboxes ---
+        onImage_files_loaded: function(loaded) {
+            imageMode = loaded
+        }
     }
 
-    // --- REMOVED header toolbar as it's no longer needed ---
+    FileDialog {
+        id: fileDialog
+        title: "Please choose one or more images"
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [ "Image files (*.jpg *.jpeg *.png)" ]
+        onAccepted: {
+            pillCounter.loadImageFiles(fileDialog.files)
+        }
+    }
 
     Item {
         id: windowContent
@@ -46,9 +56,7 @@ ApplicationWindow {
             id: image
             fillMode: Image.PreserveAspectFit
             anchors.fill: parent
-            anchors.bottomMargin: 100 // Leave space for the text and quit button
-
-            focus: true
+            anchors.bottomMargin: 120 // Leave more space for controls
         }
 
         ColumnLayout {
@@ -64,13 +72,56 @@ ApplicationWindow {
                 Layout.bottomMargin: 20
                 horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: textFontPixelSize
-                text: pillCount >= 0 ? "Detected "
-                      + pillCount + " pills." : "Initializing AI Model..."
+                text: {
+                    if (pillCount >= 0) {
+                        if (imageMode) {
+                            return "Image " + (pillCounter.current_image_index + 1) + ": Detected " + pillCount + " pills."
+                        } else {
+                            return "Live Mode: Detected " + pillCount + " pills."
+                        }
+                    } else {
+                        return "Initializing AI Model..."
+                    }
+                }
             }
 
+            // --- NEW Control Bar ---
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                // --- REMOVED all LabeledDial and CheckBox controls ---
+                spacing: 15
+
+                Button {
+                    text: "Open Image(s)"
+                    font.pixelSize: buttonFontPixelSize
+                    onClicked: fileDialog.open()
+                }
+
+                Button {
+                    text: "Live Mode"
+                    font.pixelSize: buttonFontPixelSize
+                    onClicked: pillCounter.setLiveMode()
+                    highlighted: !imageMode
+                }
+
+                // --- Image Navigation (visible only in image mode) ---
+                Button {
+                    id: prevButton
+                    text: "< Prev"
+                    font.pixelSize: buttonFontPixelSize
+                    visible: imageMode
+                    enabled: pillCounter.current_image_index > 0
+                    onClicked: pillCounter.previousImage()
+                }
+
+                Button {
+                    id: nextButton
+                    text: "Next >"
+                    font.pixelSize: buttonFontPixelSize
+                    visible: imageMode
+                    onClicked: pillCounter.nextImage()
+                }
+
+                Item { Layout.fillWidth: true } // Spacer
 
                 Button {
                     id: quitButton
@@ -84,7 +135,6 @@ ApplicationWindow {
 
     SequentialAnimation {
         id: quitAnim
-
         NumberAnimation {
             to: 0
             duration: 300
@@ -92,8 +142,6 @@ ApplicationWindow {
             property: "scale"
             easing.type: Easing.InCubic
         }
-        ScriptAction {
-            script: Qt.quit();
-        }
+        ScriptAction { script: Qt.quit(); }
     }
 }
