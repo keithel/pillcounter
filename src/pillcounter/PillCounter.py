@@ -3,6 +3,8 @@ from PySide6.QtCore import QObject, Signal, Slot, Property, Qt
 from PySide6.QtCore import QThread, QTimer, QUrl, QMetaObject, Q_ARG
 from PySide6.QtQml import QmlElement
 from pathlib import Path
+import time
+from collections import deque
 
 import cv2
 import numpy as np
@@ -26,9 +28,11 @@ class ImageProcessor(QThread):
         self.running = False
         self._camera_idx = -1
 
-        # --- NEW: Add confidence attribute ---
-        self._confidence_threshold = -1 # Default confidence value, updated by QML
-        self._font_size = -1 # Default font size, Updated by QML
+        self._confidence_threshold = -1
+        self._font_size = -1
+
+        # --- NEW: For running average in live mode ---
+        self._count_history = deque() # Stores (timestamp, count) tuples
 
         model_path = Path(__file__).resolve().parent / "best.pt"
         print(f"Loading model from: {model_path}")
@@ -42,7 +46,7 @@ class ImageProcessor(QThread):
     def rotate_90(self, image):
         return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
-    def run_model(self, image):
+    def run_model(self, image, is_live=False):
         if self._confidence_threshold == -1:
             print(f"Invalid confidence threshold {self._confidence_threshold}")
             return
@@ -53,55 +57,65 @@ class ImageProcessor(QThread):
 
         results = self.model(image, conf=self._confidence_threshold, verbose=False)
         pill_count = len(results[0].boxes)
+        display_count = pill_count # Default to instantaneous count
 
-        # --- NEW: Direct OpenCV annotation for full control ---
+        # --- NEW: Calculate running average for live mode ---
+        if is_live:
+            current_time = time.monotonic()
+            # Add the new count and timestamp
+            self._count_history.append((current_time, pill_count))
+
+            # Remove counts older than 5 seconds
+            while self._count_history and self._count_history[0][0] < current_time - 5.0:
+                self._count_history.popleft()
+
+            # Calculate the running average if there are any samples
+            if self._count_history:
+                counts = [c for t, c in self._count_history]
+                display_count = round(sum(counts) / len(counts))
+        # --- End of new logic ---
+
         annotated_frame = image.copy()
         for box in results[0].boxes:
-            # Get box coordinates, class, and confidence
             x1, y1, x2, y2 = [round(x) for x in box.xyxy[0].tolist()]
             class_id = int(box.cls)
             class_letters = ['C', 'T' ]
             confidence = float(box.conf)
             confidence_str = f"{confidence:.2f}"[1:]
-            #label = f'{self.model.names[class_id]} {confidence:.2f}'
             label = f'{class_letters[class_id]}{confidence_str}'
             color = colors(class_id, True)
             line_thickness = 1
 
-            # Draw the bounding box
             cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, line_thickness)
 
-            # --- Draw the text with a filled background ---
-            # Calculate text size
             (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, self._font_size, 1)
 
-            # Draw a filled rectangle behind the text for better visibility
-            #cv2.rectangle(annotated_frame, (x1, y1 - h - 5), (x1 + w, y1), color, -1)
-            # Draw the text on top
-            text_color = color#(255, 255,255)
+            text_color = color
             cv2.putText(annotated_frame, label, (x1, y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, self._font_size, text_color, 1, cv2.LINE_AA)
 
-        # --- End of new section ---
+        # --- MODIFIED: Use the new display_count variable ---
+        #cv2.putText(annotated_frame, f"Total Pills: {display_count}", (20, 50),
+        #            cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
 
-        cv2.putText(annotated_frame, f"Total Pills: {pill_count}", (20, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3, cv2.LINE_AA)
-
-        self.processed.emit((annotated_frame, original_image, pill_count))
+        # --- MODIFIED: Emit the new display_count variable ---
+        self.processed.emit((annotated_frame, original_image, display_count))
 
     @Slot()
     def process_camera_frame(self):
         if self.running and self._capture and self._capture.isOpened():
             grabbed, image = self._capture.read()
             if grabbed:
-                self.run_model(image)
+                # --- MODIFIED: Pass is_live=True ---
+                self.run_model(image, is_live=True)
 
     @Slot(str)
     def process_static_image(self, image_path):
         try:
             image = cv2.imread(image_path)
             if image is not None:
-                self.run_model(image)
+                # --- MODIFIED: Pass is_live=False (default behavior) ---
+                self.run_model(image, is_live=False)
             else:
                 print(f"Error: Could not read image from path {image_path}")
         except Exception as e:
@@ -140,6 +154,8 @@ class ImageProcessor(QThread):
         if self._capture:
             self._capture.release()
             self._capture = None
+        # --- NEW: Clear history when stopping ---
+        self._count_history.clear()
         print("Processing stopped.")
 
 
