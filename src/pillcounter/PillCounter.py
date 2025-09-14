@@ -78,56 +78,53 @@ class ImageProcessor(QThread):
                 image = self.rotate_90(image)
             image_blur = cv2.medianBlur(image, self._blur_aperture)
             image_blur_gray = cv2.cvtColor(image_blur, cv2.COLOR_BGR2GRAY)
-            _, image_thresh = cv2.threshold(image_blur_gray, self._gray_threshold, 255, cv2.THRESH_BINARY)
+            # Use THRESH_OTSU for automatic thresholding which is more robust to lighting changes
+            _, image_thresh = cv2.threshold(image_blur_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-            perform_contours_on = image_thresh
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self._kernel_size,self._kernel_size))
-
             closing, opening = (None, None)
-            if self._closing_enabled:
-                closing = cv2.morphologyEx(image_thresh, cv2.MORPH_CLOSE, kernel)
-                perform_contours_on = closing
-            if self._opening_enabled:
-                opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN, kernel)
-                perform_contours_on = opening
-            # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-            # dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
-            # _, last_image = cv2.threshold(dist_transform, 0.3*dist_transform.max(), 255, 0)
-            # last_image = np.uint8(last_image)
 
-            contours = cv2.findContours(perform_contours_on, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # A copy of the thresholded image that will be processed by morphology operations
+            processed_morph = image_thresh.copy()
+            if self._closing_enabled:
+                closing = cv2.morphologyEx(processed_morph, cv2.MORPH_CLOSE, kernel)
+                processed_morph = closing
+            if self._opening_enabled:
+                opening = cv2.morphologyEx(processed_morph, cv2.MORPH_OPEN, kernel)
+                processed_morph = opening
+
+            contours = cv2.findContours(processed_morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             contours = imutils.grab_contours(contours)
 
+            pill_count = 0
             if len(contours) > 0:
-                # Need a way to filter out area outliers - those contours that are too big or too small.
-                # This I think will involve finding the median of contour areas, and adding some +- factor to use
-                # to determine what is a 'good' contour.
-                contour_areas = [cv2.contourArea(c) for c in contours]
-                contour_areas.sort()
-                median_area = contour_areas[round(len(contour_areas)/2)]
-                area_thresh = median_area * 0.2 # 20% of the median area
-                pill_contours = [c for c in contours if (cv2.contourArea(c) < median_area + area_thresh and cv2.contourArea(c) > median_area - area_thresh)]
-                pill_count = len(pill_contours)
+                # --- NEW LOGIC TO HANDLE TOUCHING PILLS ---
+                # 1. Filter out small noise contours
+                min_pill_area = 500  # Minimum area to be considered a pill
+                valid_contours = [c for c in contours if cv2.contourArea(c) > min_pill_area]
 
-                area_strs = [ f"{len(pill_contours)} contours. Areas: " ]
-                for (i,c) in enumerate(contours):
-                    area = cv2.contourArea(c)
-                    ((x,y), _) = cv2.minEnclosingCircle(c)
-                    if area < median_area + area_thresh and area > median_area - area_thresh:
-                        # TODO: Handle pills touching - include 2x, 3x, 4x median_area +/- area_thresh.
-                        # TODO: To handle any multiple, make condition: if area % median_area < area_thresh and (area % median_area - median_area) > -area_thresh
-                        # TODO: Then, pill_count will have to be adjusted by area / median_area or area / median_area+1 depending on where the error is.
-                        cv2.putText(image, f"#{i+1}", (int(x)-12, int(y)+5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+                if len(valid_contours) > 0:
+                    # 2. Calculate the median area of a single pill
+                    contour_areas = [cv2.contourArea(c) for c in valid_contours]
+                    median_area = np.median(contour_areas)
+
+                    # 3. Iterate through contours and estimate pills in each clump
+                    for c in valid_contours:
+                        area = cv2.contourArea(c)
+                        # Estimate pills by dividing contour area by the median area
+                        estimated_pills = max(1, round(area / median_area))
+                        pill_count += estimated_pills
+
+                        # Draw the contour and the estimated number of pills
+                        ((x, y), _) = cv2.minEnclosingCircle(c)
                         cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
-                        area_strs.append(str(cv2.contourArea(c)))
-                        if (i < len(pill_contours)-1):
-                            area_strs.append(", ")
-                    else:
-                        # Contours that aren't identified as pills.
-                        cv2.putText(image, f"#{i+1}", (int(x)-12, int(y)+5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
-                        cv2.drawContours(image, [c], -1, (0, 0, 127), 2)
+                        cv2.putText(image, str(estimated_pills), (int(x) - 10, int(y) + 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-                print("".join(area_strs))
+            # Display the final total count on the image
+            cv2.putText(image, f"Total Pills: {pill_count}", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+
         except cv2.error as e:
             print("cv2.error: " + str(e))
 
