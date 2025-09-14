@@ -37,9 +37,12 @@ class ImageProcessor(QThread):
         return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
     def run_model(self, image):
-        """Runs the YOLO model on a single image and returns the annotated frame and count."""
+        """Runs the YOLO model on a single image and emits both original and annotated frames."""
+        original_image = image.copy() # Keep a copy of the original
         if image.shape[0] > image.shape[1]:
             image = self.rotate_90(image)
+            original_image = self.rotate_90(original_image)
+
 
         results = self.model(image, verbose=False)
         pill_count = len(results[0].boxes)
@@ -48,7 +51,8 @@ class ImageProcessor(QThread):
         cv2.putText(annotated_frame, f"Total Pills: {pill_count}", (20, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
 
-        self.processed.emit((annotated_frame, pill_count))
+        # --- MODIFIED: Emit original frame, annotated frame, and count ---
+        self.processed.emit((annotated_frame, original_image, pill_count))
 
     @Slot()
     def process_camera_frame(self):
@@ -112,28 +116,25 @@ class PillCounter(QObject):
         self._image_count = 0
         self._pill_count = -1
 
-        # --- NEW state for image file mode ---
         self._image_files = []
         self._current_image_index = -1
-        # ---
 
         self.image_processor = ImageProcessor()
         self.image_processor.processed.connect(self.update_image_provider, Qt.QueuedConnection)
-        self.image_processor.start() # Start the thread
+        self.image_processor.start()
 
     @Slot()
     def quit(self):
         self.image_processor.stop_processing()
         self.image_processor.quit()
-        self.image_processor.wait() # Wait for thread to finish
+        self.image_processor.wait()
 
     @Slot()
     def activate(self):
-        self.setLiveMode() # Start in live mode by default
+        self.setLiveMode()
 
     @Slot(list)
     def loadImageFiles(self, file_urls):
-        """Receives a list of file URLs from QML, stops live mode, and processes the first image."""
         self.image_processor.stop_processing()
         self._image_files = [QUrl(url).toLocalFile() for url in file_urls]
         if self._image_files:
@@ -160,24 +161,23 @@ class PillCounter(QObject):
 
     @Slot()
     def setLiveMode(self):
-        """Switches the application to live camera mode."""
         self._image_files = []
         self._current_image_index = -1
         self.image_files_loaded.emit(False)
-        # Call the processor's start method via a queued connection to ensure it runs on the correct thread
         QMetaObject.invokeMethod(self.image_processor, "start_live_mode", Qt.QueuedConnection)
 
     def process_current_image(self):
         if 0 <= self._current_image_index < len(self._image_files):
             path = self._image_files[self._current_image_index]
-            # Call processor's static method via queued connection
             QMetaObject.invokeMethod(self.image_processor, "process_static_image", Qt.QueuedConnection, Q_ARG(str, path))
 
-
-    def update_image_provider(self, images):
-        image, pill_count = images
+    def update_image_provider(self, data):
+        # --- MODIFIED: Handle both annotated and original images ---
+        annotated_image, original_image, pill_count = data
         image_provider = CVImageProvider.instance()
-        image_provider.set_cv_image("orig_" + self._image_path, image)
+        # Set both images in the provider with different prefixes
+        image_provider.set_cv_image("annotated_" + self._image_path, annotated_image)
+        image_provider.set_cv_image("unannotated_" + self._image_path, original_image)
 
         self.increment_image_count()
         self.set_pill_count(pill_count)

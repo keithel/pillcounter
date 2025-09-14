@@ -16,7 +16,8 @@ ApplicationWindow {
 
     Component.onCompleted: {
         pillCounter.activate()
-        imagePathPrefix = "orig_"
+        // --- MODIFIED: Start with the "annotated_" prefix ---
+        imagePathPrefix = "annotated_"
         image.source = Qt.binding(function() { return "image://cv/" + imagePathPrefix + imagePath + "?count=" + pillCounter.image_count; } )
     }
 
@@ -28,7 +29,7 @@ ApplicationWindow {
     property alias imagePath: pillCounter.image_path
     property alias pillCount: pillCounter.pill_count
     property alias imageFormat: pillCounter.image_format
-    property bool imageMode: false // To control UI visibility
+    property bool imageMode: false
 
     PillCounter {
         id: pillCounter
@@ -56,7 +57,24 @@ ApplicationWindow {
             id: image
             fillMode: Image.PreserveAspectFit
             anchors.fill: parent
-            anchors.bottomMargin: 120 // Leave more space for controls
+            anchors.bottomMargin: 120
+
+            // --- NEW: MouseArea to toggle view ---
+            MouseArea {
+                anchors.fill: parent
+                onPressed: {
+                    // When pressed, switch to the unannotated image
+                    imagePathPrefix = "unannotated_"
+                }
+                onReleased: {
+                    // When released, switch back to the annotated image
+                    imagePathPrefix = "annotated_"
+                }
+                onCanceled: {
+                    // Also switch back if the press is canceled
+                    imagePathPrefix = "annotated_"
+                }
+            }
         }
 
         ColumnLayout {
@@ -85,7 +103,6 @@ ApplicationWindow {
                 }
             }
 
-            // --- NEW Control Bar ---
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 15
@@ -103,7 +120,6 @@ ApplicationWindow {
                     highlighted: !imageMode
                 }
 
-                // --- Image Navigation (visible only in image mode) ---
                 Button {
                     id: prevButton
                     text: "< Prev"
@@ -121,7 +137,7 @@ ApplicationWindow {
                     onClicked: pillCounter.nextImage()
                 }
 
-                Item { Layout.fillWidth: true } // Spacer
+                Item { Layout.fillWidth: true }
 
                 Button {
                     id: quitButton
