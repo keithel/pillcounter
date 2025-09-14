@@ -13,6 +13,8 @@ from .ImageProviders import CVImageProvider
 from ultralytics import YOLO # Import YOLO
 from ultralytics.utils.plotting import colors # Just need the color utility
 
+from . import config
+
 QML_IMPORT_NAME = "io.qt.dev"
 QML_IMPORT_MAJOR_VERSION = 1
 
@@ -34,7 +36,7 @@ class ImageProcessor(QThread):
         # --- NEW: For running average in live mode ---
         self._count_history = deque() # Stores (timestamp, count) tuples
 
-        model_path = Path(__file__).resolve().parent / "best.pt"
+        model_path = Path(__file__).resolve().parent / config.model_name
         print(f"Loading model from: {model_path}")
         self.model = YOLO(model_path)
         print("Model loaded successfully.")

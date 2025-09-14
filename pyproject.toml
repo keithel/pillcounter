@@ -24,6 +24,11 @@ dependencies = [
     "imutils",
     "torch",
     "ultralytics",
+    "tensorflow",
+    "onnx2tf",
+    "tf_keras",
+    "onnx_graphsurgeon",
+    "ai-edge-litert",
 ]
 
 # This new section defines the command to run your application

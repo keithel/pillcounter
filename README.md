@@ -20,3 +20,14 @@ Next, train the yolov8 model on the kasetsart-university-rpmpb dataset.
 ```
 python yolov8_train.py Pills-Pills-3
 ```
+
+## Converting pytorch model to TensorFlow Lite
+
+The following converts the pytorch model to a tensorflow lite model
+`yolo export model=runs/detect/pill_training3/weights/best.pt format=tflite`
+
+## Installing models for use by the application
+
+1. Run the above machine learning scripts, including the coversion from PyTorch to TensorFlow Lite.
+2. Link or copy the `best.pt` and `best_float32.tflite` model files into the `src/pillcounter`
+   directory.
