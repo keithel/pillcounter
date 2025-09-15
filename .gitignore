@@ -106,3 +106,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# VSCode, Qt Creator user project, and clangd cache
+.cache/
+.vscode/
+CMakeLists.txt.user*
+
+# Specific to pillcounter project
+runs/
+yolo*n.pt
+Pills-Pills-3/
+calibration_image_sample_data_20x128x128x3_float32.npy
