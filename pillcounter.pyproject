@@ -1,3 +1,3 @@
 {
-    "files": ["src/pillcounter/main.py","src/pillcounter/main.qml","src/pillcounter/LabeledDial.qml","src/pillcounter/ImageProviders.py","src/pillcounter/PillCounter.py"]
+    "files": ["src/pillcounter/Main.py","src/pillcounter/main.qml","src/pillcounter/LabeledDial.qml","src/pillcounter/ImageProviders.py","src/pillcounter/PillCounter.py"]
 }

@@ -33,7 +33,7 @@ def main():
     engine.addImageProvider("cv", CVImageProvider.instance())
 
     # Correct path resolving for QML file when installed as a package
-    qml_file = os.fspath(Path(__file__).resolve().parent / "main.qml")
+    qml_file = os.fspath(Path(__file__).resolve().parent / "Main.qml")
     engine.load(qml_file)
 
     if not engine.rootObjects():
